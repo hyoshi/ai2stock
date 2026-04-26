@@ -11,6 +11,7 @@
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prepare": "tsc",
     "prepublishOnly": "npm run build"
   },
   "files": [

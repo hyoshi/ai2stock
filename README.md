@@ -34,7 +34,24 @@ LLM agents have memory, but it's fragmented across sessions and not easy for hum
 
 ## Install
 
-Currently distributed via local `npm link` (npm publish is pending). Requires Node.js 20+.
+Requires Node.js 20+, npm, git.
+
+### One-liner (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hyoshi/ai2stock/main/install.sh | bash
+```
+
+The script checks prerequisites, runs `npm install -g github:hyoshi/ai2stock` (which auto-builds via the `prepare` script), then runs `ai2stock init`.
+
+### Manual
+
+```bash
+npm install -g github:hyoshi/ai2stock
+ai2stock init
+```
+
+### Local development
 
 ```bash
 git clone https://github.com/hyoshi/ai2stock.git
@@ -42,6 +59,7 @@ cd ai2stock
 npm install
 npm run build
 npm link
+ai2stock init
 ```
 
 ## Quick Start
