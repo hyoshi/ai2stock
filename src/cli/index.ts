@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
 import { addCommand } from './commands/add.js';
 import { listCommand } from './commands/list.js';
+import { deleteCommand } from './commands/delete.js';
 
 const program = new Command();
 
@@ -34,8 +35,16 @@ program
   .option('--replace', 'Replace body of the most recent Atom (no ID needed)')
   .option('--section', 'Replace one section (interactive picker) of the most recent Atom')
   .option('--pick', 'Use interactive picker to choose target Atom from recent list')
+  .option('--id <id>', 'Target a specific Atom by id (overrides recent and pick)')
   .argument('[content]', 'Content text (omit if using --from-stdin)')
   .action(addCommand);
+
+program
+  .command('delete')
+  .description('Delete an Atom by id (requires --force to actually delete)')
+  .requiredOption('--id <id>', 'Atom id to delete')
+  .option('--force', 'Actually delete (without this, only previews)')
+  .action(deleteCommand);
 
 program
   .command('list')

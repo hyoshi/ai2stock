@@ -11,6 +11,7 @@ import {
   replaceAtomBody,
   replaceSection,
   listSections,
+  findAtomById,
 } from '../../adapters/obsidian/edit.js';
 import { serializeAtom } from '../../core/frontmatter.js';
 import { getLastAdded, getRecentList, recordAdd } from '../../core/recent.js';
@@ -29,6 +30,7 @@ interface AddOptions {
   replace?: boolean;
   section?: boolean;
   pick?: boolean;
+  id?: string;
 }
 
 const VALID_TYPES = new Set<AtomType>(['decision', 'snippet', 'learning', 'reference']);
@@ -127,9 +129,9 @@ async function handleNewAtom(body: string, opts: AddOptions, cfg: ReturnType<typ
 }
 
 async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<typeof loadConfig>): Promise<void> {
-  const target = await resolveTarget(opts);
+  const target = await resolveTarget(opts, cfg);
   if (!target) {
-    throw new Error('対象Atomが見つかりません。先に /stock で新規Atomを作成してください。');
+    throw new Error('対象Atomが見つかりません。--id 指定 or 先に /stock で新規Atom作成してください。');
   }
 
   const vaultRoot = path.resolve(cfg.obsidian.vault_path);
@@ -181,7 +183,15 @@ async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<ty
   }
 }
 
-async function resolveTarget(opts: AddOptions): Promise<{ filePath: string; title: string; id: string } | null> {
+async function resolveTarget(opts: AddOptions, cfg: ReturnType<typeof loadConfig>): Promise<{ filePath: string; title: string; id: string } | null> {
+  if (opts.id) {
+    const found = findAtomById(cfg.obsidian, opts.id);
+    if (!found) {
+      throw new Error(`Atom not found by id: ${opts.id}`);
+    }
+    return { filePath: found.filePath, title: found.title, id: found.frontmatter.id };
+  }
+
   if (opts.pick) {
     const list = getRecentList(10);
     if (list.length === 0) return null;

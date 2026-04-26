@@ -1,7 +1,39 @@
 import fs from 'node:fs';
+import path from 'node:path';
+import fg from 'fast-glob';
 import matter from 'gray-matter';
-import type { AtomFrontmatter } from '../../core/types.js';
+import type { AtomFrontmatter, ObsidianConfig } from '../../core/types.js';
 import { formatIso, isValidAtomFrontmatter, serializeAtom } from '../../core/frontmatter.js';
+
+export function findAtomById(cfg: ObsidianConfig, id: string): { filePath: string; frontmatter: AtomFrontmatter; title: string } | null {
+  const atomsDir = path.join(cfg.vault_path, cfg.folders.atoms);
+  if (!fs.existsSync(atomsDir)) return null;
+
+  const files = fg.sync('**/*.md', { cwd: atomsDir, absolute: true });
+  for (const file of files) {
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      const parsed = matter(raw);
+      if (!isValidAtomFrontmatter(parsed.data)) continue;
+      const fm: AtomFrontmatter = parsed.data;
+      if (fm.id === id) {
+        const titleMatch = parsed.content.match(/^#+\s+(.+)$/m);
+        const title = titleMatch ? titleMatch[1].trim() : fm.id;
+        return { filePath: file, frontmatter: fm, title };
+      }
+    } catch {
+      // skip unreadable
+    }
+  }
+  return null;
+}
+
+export function deleteAtomFile(filePath: string): void {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Atom file not found: ${filePath}`);
+  }
+  fs.unlinkSync(filePath);
+}
 
 function readAtom(filePath: string): { fm: AtomFrontmatter; body: string } {
   if (!fs.existsSync(filePath)) {
