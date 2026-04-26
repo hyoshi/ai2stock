@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { Atom, ObsidianConfig, WriteResult } from '../../core/types.js';
 import { serializeAtom } from '../../core/frontmatter.js';
 import { sanitizeSessionName } from '../../core/session.js';
+import { writeFileAtomic, isInsideDir } from '../../core/fs-utils.js';
 
 export interface WriteAtomOptions {
   related?: string[];
@@ -27,18 +28,12 @@ export function writeAtomToVault(
 
   const filePath = pickAvailablePath(dir, atom.frontmatter.id);
 
-  const resolvedDir = path.resolve(dir);
-  const resolvedFile = path.resolve(filePath);
-  if (!resolvedFile.startsWith(resolvedDir + path.sep)) {
+  if (!isInsideDir(filePath, dir)) {
     throw new Error(`Refusing to write atom outside its session folder: ${atom.frontmatter.id}`);
   }
 
   const text = serializeAtom(atom.frontmatter, atom.body);
-  try {
-    fs.writeFileSync(filePath, text, 'utf8');
-  } catch (e) {
-    throw new Error(`Failed to write atom to ${filePath}: ${(e as Error).message}`);
-  }
+  writeFileAtomic(filePath, text);
 
   return {
     filePath,

@@ -1,7 +1,7 @@
-import path from 'node:path';
 import chalk from 'chalk';
 import { loadConfig } from '../../core/config.js';
 import { findAtomById, deleteAtomFile } from '../../adapters/obsidian/edit.js';
+import { isInsideDir } from '../../core/fs-utils.js';
 
 interface DeleteOptions {
   id?: string;
@@ -19,10 +19,8 @@ export async function deleteCommand(opts: DeleteOptions): Promise<void> {
     throw new Error(`Atom not found by id: ${opts.id}`);
   }
 
-  const vaultRoot = path.resolve(cfg.obsidian.vault_path);
-  const resolved = path.resolve(found.filePath);
-  if (!resolved.startsWith(vaultRoot + path.sep)) {
-    throw new Error(`Refusing to delete path outside vault: ${resolved}`);
+  if (!isInsideDir(found.filePath, cfg.obsidian.vault_path)) {
+    throw new Error(`Refusing to delete path outside vault: ${found.filePath}`);
   }
 
   if (!opts.force) {

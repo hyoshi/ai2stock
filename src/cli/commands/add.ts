@@ -1,7 +1,7 @@
-import path from 'node:path';
 import chalk from 'chalk';
 import prompts from 'prompts';
 import { loadConfig } from '../../core/config.js';
+import { isInsideDir } from '../../core/fs-utils.js';
 import { buildAtomFromInput } from '../../core/intermediate.js';
 import { writeAtomToVault } from '../../adapters/obsidian/write.js';
 import { findRelatedAtoms, insertBacklinks } from '../../adapters/obsidian/backlink.js';
@@ -134,10 +134,8 @@ async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<ty
     throw new Error('対象Atomが見つかりません。--id 指定 or 先に /stock で新規Atom作成してください。');
   }
 
-  const vaultRoot = path.resolve(cfg.obsidian.vault_path);
-  const resolved = path.resolve(target.filePath);
-  if (!resolved.startsWith(vaultRoot + path.sep)) {
-    throw new Error(`Refusing to edit path outside vault: ${resolved}`);
+  if (!isInsideDir(target.filePath, cfg.obsidian.vault_path)) {
+    throw new Error(`Refusing to edit path outside vault: ${target.filePath}`);
   }
 
   if (opts.dryRun) {

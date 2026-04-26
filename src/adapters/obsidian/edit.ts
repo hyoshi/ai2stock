@@ -4,6 +4,7 @@ import fg from 'fast-glob';
 import matter from 'gray-matter';
 import type { AtomFrontmatter, ObsidianConfig } from '../../core/types.js';
 import { formatIso, isValidAtomFrontmatter, serializeAtom } from '../../core/frontmatter.js';
+import { writeFileAtomic } from '../../core/fs-utils.js';
 
 export function findAtomById(cfg: ObsidianConfig, id: string): { filePath: string; frontmatter: AtomFrontmatter; title: string } | null {
   const atomsDir = path.join(cfg.vault_path, cfg.folders.atoms);
@@ -48,15 +49,7 @@ function readAtom(filePath: string): { fm: AtomFrontmatter; body: string } {
 }
 
 function writeAtomFile(filePath: string, fm: AtomFrontmatter, body: string): void {
-  const text = serializeAtom(fm, body);
-  const tmpPath = `${filePath}.tmp.${process.pid}`;
-  try {
-    fs.writeFileSync(tmpPath, text, 'utf8');
-    fs.renameSync(tmpPath, filePath);
-  } catch (e) {
-    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-    throw new Error(`Failed to write atom to ${filePath}: ${(e as Error).message}`);
-  }
+  writeFileAtomic(filePath, serializeAtom(fm, body));
 }
 
 function pad2(n: number): string {
