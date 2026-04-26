@@ -63,13 +63,31 @@ export async function deleteCommand(opts: DeleteOptions): Promise<void> {
     return;
   }
 
+  const failures: string[] = [];
+
   if (obsidianFound) {
-    deleteAtomFile(obsidianFound.filePath);
-    console.log(chalk.green(`✓ Obsidian 削除: ${obsidianFound.filePath}`));
+    try {
+      deleteAtomFile(obsidianFound.filePath);
+      console.log(chalk.green(`✓ Obsidian 削除: ${obsidianFound.filePath}`));
+    } catch (e) {
+      failures.push(`obsidian: ${(e as Error).message}`);
+    }
   }
   if (notionFound && cfg.notion) {
-    await archiveNotionAtom(cfg.notion, notionFound.pageId);
-    console.log(chalk.green(`✓ Notion archive: ${notionFound.url}`));
+    try {
+      await archiveNotionAtom(cfg.notion, notionFound.pageId);
+      console.log(chalk.green(`✓ Notion archive: ${notionFound.url}`));
+    } catch (e) {
+      failures.push(`notion: ${(e as Error).message}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    for (const f of failures) console.error(chalk.red(`✗ ${f}`));
+    process.exitCode = 1;
+    if (targets.length === 1 || (failures.length === 1 && (obsidianFound ? 1 : 0) + (notionFound ? 1 : 0) === 1)) {
+      throw new Error(failures[0]);
+    }
   }
 }
 

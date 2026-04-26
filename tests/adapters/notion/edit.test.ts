@@ -6,6 +6,7 @@ const appendMock = vi.fn();
 const listMock = vi.fn();
 const deleteMock = vi.fn();
 const updateMock = vi.fn();
+const retrieveMock = vi.fn();
 
 vi.mock('@notionhq/client', () => ({
   Client: vi.fn().mockImplementation(() => ({
@@ -14,7 +15,7 @@ vi.mock('@notionhq/client', () => ({
       children: { append: appendMock, list: listMock },
       delete: deleteMock,
     },
-    pages: { update: updateMock },
+    pages: { update: updateMock, retrieve: retrieveMock },
   })),
 }));
 
@@ -37,6 +38,7 @@ beforeEach(() => {
   listMock.mockReset();
   deleteMock.mockReset();
   updateMock.mockReset();
+  retrieveMock.mockReset();
   process.env.TEST_NOTION_TOKEN = 'secret_test';
 });
 
@@ -126,7 +128,7 @@ describe('replaceNotionAtomBody', () => {
     expect(deleteMock).toHaveBeenCalledTimes(2);
   });
 
-  it('continues despite per-block delete failures', async () => {
+  it('aborts (does not append) when any delete fails — atomicity guard', async () => {
     listMock.mockResolvedValue({
       results: [{ id: 'b1' }, { id: 'b2' }],
       has_more: false,
@@ -136,16 +138,45 @@ describe('replaceNotionAtomBody', () => {
       .mockResolvedValueOnce({});
     appendMock.mockResolvedValue({});
 
-    await replaceNotionAtomBody(cfg, 'page-abc', 'new');
+    await expect(replaceNotionAtomBody(cfg, 'page-abc', 'new')).rejects.toThrow(/replace aborted/);
     expect(deleteMock).toHaveBeenCalledTimes(2);
-    expect(appendMock).toHaveBeenCalledTimes(1);
+    expect(appendMock).not.toHaveBeenCalled();
   });
 });
 
 describe('archiveNotionAtom', () => {
-  it('calls pages.update with archived=true', async () => {
+  it('verifies page parent DB then archives', async () => {
+    retrieveMock.mockResolvedValue({
+      parent: { type: 'database_id', database_id: 'db-test' },
+    });
     updateMock.mockResolvedValue({});
     await archiveNotionAtom(cfg, 'page-abc');
+    expect(retrieveMock).toHaveBeenCalledWith({ page_id: 'page-abc' });
     expect(updateMock).toHaveBeenCalledWith({ page_id: 'page-abc', archived: true });
+  });
+
+  it('refuses to archive when page belongs to different DB', async () => {
+    retrieveMock.mockResolvedValue({
+      parent: { type: 'database_id', database_id: 'OTHER-db' },
+    });
+    await expect(archiveNotionAtom(cfg, 'page-abc')).rejects.toThrow(/outside configured DB/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses to archive when parent type is not database', async () => {
+    retrieveMock.mockResolvedValue({
+      parent: { type: 'page_id' },
+    });
+    await expect(archiveNotionAtom(cfg, 'page-abc')).rejects.toThrow(/outside configured DB/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('treats hyphenated and stripped DB ids as equal', async () => {
+    retrieveMock.mockResolvedValue({
+      parent: { type: 'database_id', database_id: 'db-test' },
+    });
+    updateMock.mockResolvedValue({});
+    await archiveNotionAtom({ ...cfg, database_id: 'DB-TEST' }, 'page-abc');
+    expect(updateMock).toHaveBeenCalled();
   });
 });

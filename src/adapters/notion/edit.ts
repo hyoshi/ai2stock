@@ -67,10 +67,13 @@ export async function replaceNotionAtomBody(
 ): Promise<void> {
   const client = getClient(cfg, tokenEnvOverride);
 
-  // 1. List existing children (paginated)
+  // 1. List existing children (paginated, cap at 20 pages = 2000 blocks)
+  const PAGE_CAP = 20;
   const existingIds: string[] = [];
   let cursor: string | undefined = undefined;
-  for (let i = 0; i < 20; i++) {
+  let truncated = false;
+  let i = 0;
+  for (; i < PAGE_CAP; i++) {
     const page = await client.blocks.children.list({
       block_id: pageId,
       start_cursor: cursor,
@@ -82,15 +85,33 @@ export async function replaceNotionAtomBody(
     if (!hasMore) break;
     cursor = (page as { next_cursor?: string | null }).next_cursor ?? undefined;
     if (!cursor) break;
+    if (i === PAGE_CAP - 1 && hasMore) {
+      truncated = true;
+    }
+  }
+  if (truncated) {
+    console.warn(`[ai2stock] Notion: page has more than ${PAGE_CAP * 100} child blocks; older blocks will not be deleted in this replace.`);
   }
 
-  // 2. Delete each existing block (Notion has no bulk delete)
+  // 2. Delete each existing block. Collect failures; abort if any to avoid
+  //    leaving the page in a mixed (old + new) state.
+  const deleteFailures: Array<{ id: string; reason: string }> = [];
   for (const blockId of existingIds) {
     try {
       await client.blocks.delete({ block_id: blockId });
     } catch (e) {
-      console.warn(`[ai2stock] Notion: failed to delete block ${blockId}: ${(e as Error).message}`);
+      deleteFailures.push({ id: blockId, reason: (e as Error).message });
     }
+  }
+  if (deleteFailures.length > 0) {
+    const summary = deleteFailures
+      .slice(0, 3)
+      .map((f) => `${f.id}: ${f.reason}`)
+      .join('; ');
+    throw new Error(
+      `Notion replace aborted: ${deleteFailures.length} of ${existingIds.length} block deletes failed. ` +
+        `Page kept in pre-replace state. First failures: ${summary}`,
+    );
   }
 
   // 3. Append new blocks
@@ -108,6 +129,26 @@ export async function archiveNotionAtom(
   tokenEnvOverride?: string,
 ): Promise<void> {
   const client = getClient(cfg, tokenEnvOverride);
+
+  // Defense-in-depth: verify pageId actually belongs to the configured DB
+  // before archiving. Prevents accidental archive of arbitrary pages the
+  // integration has access to.
+  try {
+    const page = await client.pages.retrieve({ page_id: pageId });
+    const parent = (page as { parent?: { type?: string; database_id?: string } }).parent;
+    const parentDbRaw = parent?.database_id ?? '';
+    const parentDbNorm = parentDbRaw.replace(/-/g, '').toLowerCase();
+    const cfgDbNorm = cfg.database_id.replace(/-/g, '').toLowerCase();
+    if (parent?.type !== 'database_id' || parentDbNorm !== cfgDbNorm) {
+      throw new Error(
+        `Refusing to archive page outside configured DB. page parent=${parentDbRaw}, expected=${cfg.database_id}`,
+      );
+    }
+  } catch (e) {
+    if ((e as Error).message?.startsWith('Refusing to archive')) throw e;
+    throw new Error(`Notion: cannot verify page parent: ${(e as Error).message}`);
+  }
+
   await client.pages.update({
     page_id: pageId,
     archived: true,

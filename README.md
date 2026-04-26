@@ -272,6 +272,8 @@ AI2Stock can write atoms to a Notion Database in addition to (or instead of) Obs
 
 For Notion edits, an explicit `--id <atom-id>` is required (Notion lookup queries the Title property). For Obsidian, the most-recently-added atom is used by default if `--id` is omitted.
 
+> **Note on delete defaults**: Unlike `/stock` (writes to all enabled adapters by default), `delete` defaults to the **primary adapter only** (safer). To delete from both, pass `--to=all` explicitly. Otherwise you may leave a Notion-only orphan.
+
 Examples:
 ```bash
 echo "more" | ai2stock add --from-stdin --append --to=notion --id=2026-04-26-1943-spec
