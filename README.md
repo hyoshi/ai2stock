@@ -34,7 +34,13 @@ LLM agents have memory, but it's fragmented across sessions and not easy for hum
 
 ## Install
 
-Requires Node.js 20+, npm, git.
+### Prerequisites
+
+- **Node.js 20+** (`node -v` to check, install from [nodejs.org](https://nodejs.org/))
+- **npm** (bundled with Node.js)
+- **git** (most systems already have it)
+- **An Obsidian Vault** (a folder of `.md` files; Obsidian app itself is optional)
+- **Claude Code** if you want the `/stock` slash command
 
 ### One-liner (recommended)
 
@@ -42,9 +48,21 @@ Requires Node.js 20+, npm, git.
 curl -fsSL https://raw.githubusercontent.com/hyoshi/ai2stock/main/install.sh | bash
 ```
 
-The script checks prerequisites, runs `npm install -g github:hyoshi/ai2stock` (which auto-builds via the `prepare` script), then runs `ai2stock init`.
+What it does:
+
+1. Verifies Node 20+, npm, git are present
+2. Runs `npm install -g github:hyoshi/ai2stock`
+   (the `prepare` script auto-builds `dist/` from TypeScript)
+3. Runs `ai2stock init` interactively:
+   - Pick (or create) your Obsidian Vault path
+   - Set a default project name (optional)
+   - Install `/stock` slash command into `~/.claude/commands/`
+
+After this, `/stock` is ready to use in Claude Code.
 
 ### Manual
+
+If you prefer to run the steps yourself:
 
 ```bash
 npm install -g github:hyoshi/ai2stock
@@ -60,6 +78,31 @@ npm install
 npm run build
 npm link
 ai2stock init
+```
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `ai2stock: command not found` after install | Check `npm config get prefix` — the `bin/` subdirectory must be on your `PATH` |
+| `Node.js 20+ required` | Upgrade Node.js (e.g. via [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm)) |
+| `EACCES` on `npm install -g` | Use a Node version manager (nvm/fnm) or set a user-writable npm prefix; do **not** use `sudo` |
+| `/stock` not found in Claude Code | Re-run `ai2stock init` to (re-)install the slash command |
+
+### Update
+
+```bash
+npm install -g github:hyoshi/ai2stock
+```
+
+(re-running pulls the latest commit from `main`.)
+
+### Uninstall
+
+```bash
+npm uninstall -g @yoshinaga/ai2stock
+rm -f ~/.claude/commands/stock.md
+rm -rf ~/.config/ai2stock        # config + recent.json (vault is untouched)
 ```
 
 ## Quick Start
