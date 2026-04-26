@@ -30,6 +30,7 @@ function makeAtom(overrides: Partial<Atom['frontmatter']> = {}, body = '# Test\n
       'ai-generated': true,
       tags: ['oss', 'test'],
       project: 'ai2stock',
+      session_name: 'TestSession',
       ...overrides,
     },
     title: 'Test Atom',
@@ -38,18 +39,31 @@ function makeAtom(overrides: Partial<Atom['frontmatter']> = {}, body = '# Test\n
 }
 
 describe('writeAtomToVault', () => {
-  it('writes atom into the correct type folder', () => {
-    const atom = makeAtom({ type: 'snippet' });
+  it('writes atom into the session-named folder', () => {
+    const atom = makeAtom({ session_name: 'MySession' });
     const result = writeAtomToVault(atom, cfg);
-    expect(result.filePath).toContain(path.join('10-Atoms', 'snippets'));
+    expect(result.filePath).toContain(path.join('10-Atoms', 'MySession'));
     expect(result.filePath.endsWith('.md')).toBe(true);
     expect(fs.existsSync(result.filePath)).toBe(true);
   });
 
-  it('creates folder structure if missing', () => {
-    const atom = makeAtom({ type: 'learning' });
+  it('creates session folder structure if missing', () => {
+    const atom = makeAtom({ session_name: 'NewSession' });
     writeAtomToVault(atom, cfg);
-    expect(fs.existsSync(path.join(tmpVault, '10-Atoms', 'learnings'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpVault, '10-Atoms', 'NewSession'))).toBe(true);
+  });
+
+  it('falls back to untitled-session when session_name missing', () => {
+    const atom = makeAtom({ session_name: undefined });
+    const result = writeAtomToVault(atom, cfg);
+    expect(result.filePath).toContain(path.join('10-Atoms', 'untitled-session'));
+  });
+
+  it('sanitizes session names with path-traversal characters', () => {
+    const atom = makeAtom({ session_name: '../bad/name' });
+    const result = writeAtomToVault(atom, cfg);
+    expect(result.filePath).not.toContain('..');
+    expect(result.filePath).toContain('10-Atoms');
   });
 
   it('writes valid frontmatter and body', () => {

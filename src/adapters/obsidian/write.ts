@@ -1,14 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Atom, AtomType, ObsidianConfig, WriteResult } from '../../core/types.js';
+import type { Atom, ObsidianConfig, WriteResult } from '../../core/types.js';
 import { serializeAtom } from '../../core/frontmatter.js';
-
-const TYPE_TO_SUBFOLDER: Record<AtomType, string> = {
-  decision: 'decisions',
-  snippet: 'snippets',
-  learning: 'learnings',
-  reference: 'references',
-};
+import { sanitizeSessionName } from '../../core/session.js';
 
 export interface WriteAtomOptions {
   related?: string[];
@@ -27,8 +21,8 @@ export function writeAtomToVault(
     throw new Error(`Vault path does not exist: ${cfg.vault_path}`);
   }
 
-  const subfolder = TYPE_TO_SUBFOLDER[atom.frontmatter.type];
-  const dir = path.join(cfg.vault_path, cfg.folders.atoms, subfolder);
+  const sessionFolder = sanitizeSessionName(atom.frontmatter.session_name || 'untitled-session');
+  const dir = path.join(cfg.vault_path, cfg.folders.atoms, sessionFolder);
   fs.mkdirSync(dir, { recursive: true });
 
   const filePath = pickAvailablePath(dir, atom.frontmatter.id);
@@ -36,7 +30,7 @@ export function writeAtomToVault(
   const resolvedDir = path.resolve(dir);
   const resolvedFile = path.resolve(filePath);
   if (!resolvedFile.startsWith(resolvedDir + path.sep)) {
-    throw new Error(`Refusing to write atom outside its type folder: ${atom.frontmatter.id}`);
+    throw new Error(`Refusing to write atom outside its session folder: ${atom.frontmatter.id}`);
   }
 
   const text = serializeAtom(atom.frontmatter, atom.body);

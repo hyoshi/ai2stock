@@ -60,6 +60,8 @@ export interface BuildFrontmatterInput {
   project?: string;
   source?: string;
   session?: string;
+  sessionName?: string;
+  sessionDir?: string;
   confidence?: Confidence;
   aiGenerated?: boolean;
   now?: Date;
@@ -79,12 +81,18 @@ export function buildFrontmatter(input: BuildFrontmatterInput): AtomFrontmatter 
   if (input.project) fm.project = input.project;
   if (input.source) fm.source = input.source;
   if (input.session) fm.session = input.session;
+  if (input.sessionName) fm.session_name = input.sessionName;
+  if (input.sessionDir) fm.session_dir = input.sessionDir;
   if (input.confidence) fm.confidence = input.confidence;
   return fm;
 }
 
 export function serializeAtom(frontmatter: AtomFrontmatter, body: string): string {
-  return matter.stringify(body, frontmatter as unknown as Record<string, unknown>);
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(frontmatter)) {
+    if (v !== undefined) clean[k] = v;
+  }
+  return matter.stringify(body, clean);
 }
 
 export function isValidAtomFrontmatter(d: unknown): d is AtomFrontmatter {

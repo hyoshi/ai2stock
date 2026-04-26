@@ -10,6 +10,8 @@ export interface AtomFrontmatter {
   project?: string;
   tags?: string[];
   session?: string;
+  session_name?: string;
+  session_dir?: string;
   source?: string;
   confidence?: Confidence;
   status?: 'draft' | 'reviewed' | 'archived';
