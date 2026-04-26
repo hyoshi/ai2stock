@@ -127,12 +127,24 @@ function buildBlocks(body: string): Array<Record<string, unknown>> {
     blocks.push(codeBlock(codeBuf.join('\n'), codeLang));
   }
 
-  return blocks.slice(0, 100);
+  const MAX_BLOCKS = 100;
+  if (blocks.length > MAX_BLOCKS) {
+    const dropped = blocks.length - (MAX_BLOCKS - 1);
+    console.warn(`[ai2stock] Notion: body has ${blocks.length} blocks, truncating to ${MAX_BLOCKS} (${dropped} dropped). Notion's API limit is 100 child blocks per page.`);
+    return [
+      ...blocks.slice(0, MAX_BLOCKS - 1),
+      paragraphBlock(`[truncated: ${dropped} more blocks omitted; full content remains in Obsidian]`),
+    ];
+  }
+  return blocks;
 }
 
 function richText(content: string): Array<Record<string, unknown>> {
-  const safe = content.length > MAX_BLOCK_TEXT ? content.slice(0, MAX_BLOCK_TEXT - 1) + '…' : content;
-  return [{ type: 'text', text: { content: safe } }];
+  if (content.length > MAX_BLOCK_TEXT) {
+    console.warn(`[ai2stock] Notion: truncating block text from ${content.length} to ${MAX_BLOCK_TEXT} chars (Notion API limit per rich_text element).`);
+    return [{ type: 'text', text: { content: content.slice(0, MAX_BLOCK_TEXT - 1) + '…' } }];
+  }
+  return [{ type: 'text', text: { content } }];
 }
 
 function paragraphBlock(text: string): Record<string, unknown> {

@@ -114,6 +114,7 @@ async function handleNewAtom(body: string, opts: AddOptions, cfg: ReturnType<typ
   let related: Array<{ frontmatter: { id: string } }> = [];
   let mocUpdated = false;
   const notionResults: Array<{ pageId: string; url: string }> = [];
+  const failures: string[] = [];
 
   for (const target of targets) {
     if (target === 'obsidian') {
@@ -129,15 +130,28 @@ async function handleNewAtom(body: string, opts: AddOptions, cfg: ReturnType<typ
     } else if (target === 'notion') {
       if (!cfg.notion?.enabled) {
         console.warn(chalk.yellow('! notion target requested but adapter is disabled in config'));
+        failures.push('notion');
         continue;
       }
       try {
         const r = await writeAtomToNotion(atom, cfg.notion);
         notionResults.push(r);
       } catch (e) {
-        console.error(chalk.red(`✗ notion write failed: ${(e as Error).message}`));
+        const err = e as Error & { code?: string; status?: number };
+        const detail = [err.message, err.code, err.status ? `HTTP ${err.status}` : null]
+          .filter(Boolean)
+          .join(' | ');
+        console.error(chalk.red(`✗ notion write failed: ${detail}`));
+        failures.push('notion');
+        if (targets.length === 1) {
+          throw new Error(`Notion-only write failed: ${err.message}`);
+        }
       }
     }
+  }
+
+  if (failures.length > 0) {
+    process.exitCode = 1;
   }
 
   if (firstObsidianResult) {
@@ -155,7 +169,7 @@ async function handleNewAtom(body: string, opts: AddOptions, cfg: ReturnType<typ
   printSaveSummary(firstObsidianResult, atom, related, mocUpdated, notionResults);
 }
 
-function resolveAdapterTargets(toFlag: string | undefined, cfg: ReturnType<typeof loadConfig>): string[] {
+export function resolveAdapterTargets(toFlag: string | undefined, cfg: ReturnType<typeof loadConfig>): string[] {
   if (toFlag) {
     if (toFlag === 'all') return ['obsidian', 'notion'];
     return toFlag.split(',').map((s) => s.trim()).filter(Boolean);
