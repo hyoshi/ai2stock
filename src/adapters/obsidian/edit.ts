@@ -10,7 +10,16 @@ export function findAtomById(cfg: ObsidianConfig, id: string): { filePath: strin
   const atomsDir = path.join(cfg.vault_path, cfg.folders.atoms);
   if (!fs.existsSync(atomsDir)) return null;
 
-  const files = fg.sync('**/*.md', { cwd: atomsDir, absolute: true });
+  const safeId = id.replace(/[^a-zA-Z0-9_.-]/g, '');
+  const fastCandidates = fg.sync(`**/${safeId}*.md`, { cwd: atomsDir, absolute: true });
+  const found = scanForId(fastCandidates, id);
+  if (found) return found;
+
+  const allFiles = fg.sync('**/*.md', { cwd: atomsDir, absolute: true });
+  return scanForId(allFiles, id);
+}
+
+function scanForId(files: string[], id: string): { filePath: string; frontmatter: AtomFrontmatter; title: string } | null {
   for (const file of files) {
     try {
       const raw = fs.readFileSync(file, 'utf8');
@@ -22,8 +31,8 @@ export function findAtomById(cfg: ObsidianConfig, id: string): { filePath: strin
         const title = titleMatch ? titleMatch[1].trim() : fm.id;
         return { filePath: file, frontmatter: fm, title };
       }
-    } catch {
-      // skip unreadable
+    } catch (e) {
+      console.warn(`[ai2stock] skipped unreadable atom ${file}: ${(e as Error).message}`);
     }
   }
   return null;

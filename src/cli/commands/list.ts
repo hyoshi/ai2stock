@@ -58,8 +58,8 @@ export async function listCommand(opts: ListOptions): Promise<void> {
         title,
         filePath: file,
       });
-    } catch {
-      // skip
+    } catch (e) {
+      console.warn(`[ai2stock] skipped unreadable atom ${file}: ${(e as Error).message}`);
     }
   }
 

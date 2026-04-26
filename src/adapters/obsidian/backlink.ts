@@ -40,8 +40,8 @@ export function findRelatedAtoms(
         matches.push({ filePath: file, frontmatter: fm });
       }
       if (matches.length >= limit) break;
-    } catch {
-      // skip unreadable file
+    } catch (e) {
+      console.warn(`[ai2stock] skipped unreadable atom ${file}: ${(e as Error).message}`);
     }
   }
 

@@ -45,14 +45,27 @@ export function writeAtomToVault(
 
 function pickAvailablePath(dir: string, id: string): string {
   const baseName = sanitizeFileName(id);
-  const candidate = path.join(dir, `${baseName}.md`);
-  if (!fs.existsSync(candidate)) return candidate;
-
-  for (let i = 2; i < 100; i++) {
-    const next = path.join(dir, `${baseName}-${i}.md`);
-    if (!fs.existsSync(next)) return next;
+  const candidates = [
+    path.join(dir, `${baseName}.md`),
+    ...Array.from({ length: 98 }, (_, i) => path.join(dir, `${baseName}-${i + 2}.md`)),
+  ];
+  for (const candidate of candidates) {
+    if (tryAtomicReserve(candidate)) return candidate;
   }
-  return path.join(dir, `${baseName}-${Date.now()}.md`);
+  const fallback = path.join(dir, `${baseName}-${Date.now()}-${process.pid}.md`);
+  if (tryAtomicReserve(fallback)) return fallback;
+  throw new Error(`Could not reserve unique path for atom: ${baseName}`);
+}
+
+function tryAtomicReserve(candidate: string): boolean {
+  try {
+    const fd = fs.openSync(candidate, 'wx');
+    fs.closeSync(fd);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  }
 }
 
 function sanitizeFileName(s: string): string {
