@@ -128,6 +128,25 @@ describe('replaceNotionAtomBody', () => {
     expect(deleteMock).toHaveBeenCalledTimes(2);
   });
 
+  it('warns when pagination cap (20 pages = 2000 blocks) is reached', async () => {
+    // Always say has_more so the loop runs the full 20 iterations
+    listMock.mockResolvedValue({
+      results: [{ id: 'b1' }],
+      has_more: true,
+      next_cursor: 'c',
+    });
+    deleteMock.mockResolvedValue({});
+    appendMock.mockResolvedValue({});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await replaceNotionAtomBody(cfg, 'page-abc', 'new');
+
+    expect(listMock).toHaveBeenCalledTimes(20);
+    const warns = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warns).toMatch(/more than 2000 child blocks/);
+    warnSpy.mockRestore();
+  });
+
   it('aborts (does not append) when any delete fails — atomicity guard', async () => {
     listMock.mockResolvedValue({
       results: [{ id: 'b1' }, { id: 'b2' }],
