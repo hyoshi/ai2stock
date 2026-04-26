@@ -1,0 +1,52 @@
+{
+  "name": "@yoshinaga/ai2stock",
+  "version": "0.1.0",
+  "description": "Stock AI conversations as Atomic notes in your Obsidian Vault. Turn ephemeral chats into a searchable second brain.",
+  "type": "module",
+  "bin": {
+    "ai2stock": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "commands",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "obsidian",
+    "ai",
+    "knowledge-management",
+    "second-brain",
+    "atomic-notes"
+  ],
+  "author": "yoshinaga",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "gray-matter": "^4.0.3",
+    "fast-glob": "^3.3.2",
+    "chalk": "^5.3.0",
+    "prompts": "^2.4.2",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/prompts": "^2.4.9",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.6.0",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0"
+  }
+}
