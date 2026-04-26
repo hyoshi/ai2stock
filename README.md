@@ -261,7 +261,23 @@ AI2Stock can write atoms to a Notion Database in addition to (or instead of) Obs
 | This call: Obsidian only | `/stock --to=obsidian` |
 | This call: both | `/stock --to=all` |
 
-Edits (`--append`, `--replace`, `--section`, `delete`) currently apply to Obsidian only. Notion edit support is planned for v0.4.1.
+### Edit operations on Notion (v0.4.1+)
+
+| Operation | Obsidian | Notion |
+|---|---|---|
+| `--append` (add to end) | ✅ | ✅ |
+| `--replace` (full body replace) | ✅ | ✅ |
+| `--section` (replace one heading section) | ✅ | ❌ Obsidian only |
+| `delete` | ✅ unlink | ✅ archive |
+
+For Notion edits, an explicit `--id <atom-id>` is required (Notion lookup queries the Title property). For Obsidian, the most-recently-added atom is used by default if `--id` is omitted.
+
+Examples:
+```bash
+echo "more" | ai2stock add --from-stdin --append --to=notion --id=2026-04-26-1943-spec
+echo "new body" | ai2stock add --from-stdin --replace --to=notion --id=2026-04-26-1943-spec
+ai2stock delete --to=notion --id=2026-04-26-1943-spec --force
+```
 
 ## Development
 

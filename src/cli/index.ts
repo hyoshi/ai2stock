@@ -44,6 +44,7 @@ program
   .description('Delete an Atom by id (requires --force to actually delete)')
   .requiredOption('--id <id>', 'Atom id to delete')
   .option('--force', 'Actually delete (without this, only previews)')
+  .option('--to <adapters>', 'obsidian|notion|all (default: primary adapter)')
   .action(deleteCommand);
 
 program

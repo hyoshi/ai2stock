@@ -8,6 +8,11 @@ import { findRelatedAtoms, insertBacklinks } from '../../adapters/obsidian/backl
 import { updateProjectMoc } from '../../adapters/obsidian/moc.js';
 import { writeAtomToNotion } from '../../adapters/notion/write.js';
 import {
+  appendToNotionAtom,
+  replaceNotionAtomBody,
+  findNotionAtomById,
+} from '../../adapters/notion/edit.js';
+import {
   appendToAtom,
   replaceAtomBody,
   replaceSection,
@@ -182,39 +187,82 @@ export function resolveAdapterTargets(toFlag: string | undefined, cfg: ReturnTyp
 }
 
 async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<typeof loadConfig>): Promise<void> {
-  const target = await resolveTarget(opts, cfg);
-  if (!target) {
-    throw new Error('対象Atomが見つかりません。--id 指定 or 先に /stock で新規Atom作成してください。');
+  const targets = resolveAdapterTargets(opts.to, cfg);
+  if (targets.length === 0) {
+    throw new Error('No enabled adapters to edit on. Check config or --to flag.');
   }
 
-  if (!isInsideDir(target.filePath, cfg.obsidian.vault_path)) {
-    throw new Error(`Refusing to edit path outside vault: ${target.filePath}`);
+  const wantsObsidian = targets.includes('obsidian');
+  const wantsNotion = targets.includes('notion');
+
+  let obsidianTarget: { filePath: string; title: string; id: string } | null = null;
+  if (wantsObsidian) {
+    obsidianTarget = await resolveTarget(opts, cfg);
+    if (!obsidianTarget) {
+      throw new Error('対象Atomが見つかりません（Obsidian）。--id 指定 or 先に /stock で新規Atom作成してください。');
+    }
+    if (!isInsideDir(obsidianTarget.filePath, cfg.obsidian.vault_path)) {
+      throw new Error(`Refusing to edit path outside vault: ${obsidianTarget.filePath}`);
+    }
+  }
+
+  if (opts.section && wantsNotion) {
+    console.warn(chalk.yellow('! --section is not yet supported for Notion. Falling back to Obsidian only for section edits.'));
   }
 
   if (opts.dryRun) {
     console.log(chalk.bold.cyan(`--- DRY RUN: ${describeMode(opts)} ---`));
-    console.log(chalk.dim(`Target: ${target.filePath}`));
+    if (obsidianTarget) console.log(chalk.dim(`Obsidian target: ${obsidianTarget.filePath}`));
+    if (wantsNotion && !opts.section) {
+      const idForNotion = opts.id ?? obsidianTarget?.id ?? '<resolved-from-recent>';
+      console.log(chalk.dim(`Notion target: id=${idForNotion}`));
+    }
     console.log(body);
     console.log(chalk.bold.cyan('--- (not saved) ---'));
     return;
   }
 
+  const failures: string[] = [];
+
   if (opts.append) {
-    appendToAtom(target.filePath, body);
-    console.log(chalk.green(`✓ 追記: ${target.filePath}`));
-    console.log(`  Title: ${target.title}`);
+    if (wantsObsidian && obsidianTarget) {
+      appendToAtom(obsidianTarget.filePath, body);
+      console.log(chalk.green(`✓ Obsidian 追記: ${obsidianTarget.filePath}`));
+    }
+    if (wantsNotion) {
+      try {
+        await runNotionEdit(opts, cfg, obsidianTarget?.id, async (cfgN, pageId) => {
+          await appendToNotionAtom(cfgN, pageId, body);
+          console.log(chalk.green(`✓ Notion 追記: pageId=${pageId}`));
+        });
+      } catch (e) { failures.push(`notion: ${(e as Error).message}`); }
+    }
+    finalize(failures, targets);
     return;
   }
 
   if (opts.replace) {
-    replaceAtomBody(target.filePath, body);
-    console.log(chalk.green(`✓ 置換: ${target.filePath}`));
-    console.log(`  Title: ${target.title}`);
+    if (wantsObsidian && obsidianTarget) {
+      replaceAtomBody(obsidianTarget.filePath, body);
+      console.log(chalk.green(`✓ Obsidian 置換: ${obsidianTarget.filePath}`));
+    }
+    if (wantsNotion) {
+      try {
+        await runNotionEdit(opts, cfg, obsidianTarget?.id, async (cfgN, pageId) => {
+          await replaceNotionAtomBody(cfgN, pageId, body);
+          console.log(chalk.green(`✓ Notion 置換: pageId=${pageId}`));
+        });
+      } catch (e) { failures.push(`notion: ${(e as Error).message}`); }
+    }
+    finalize(failures, targets);
     return;
   }
 
   if (opts.section) {
-    const sections = listSections(target.filePath);
+    if (!obsidianTarget) {
+      throw new Error('--section requires Obsidian target.');
+    }
+    const sections = listSections(obsidianTarget.filePath);
     if (sections.length === 0) {
       throw new Error('対象Atomに ## 見出しがありません。--replace を使ってください。');
     }
@@ -227,10 +275,40 @@ async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<ty
     if (!selected) {
       throw new Error('sectionが選択されませんでした');
     }
-    replaceSection(target.filePath, selected, body);
-    console.log(chalk.green(`✓ Section置換: ${target.filePath}`));
+    replaceSection(obsidianTarget.filePath, selected, body);
+    console.log(chalk.green(`✓ Section置換: ${obsidianTarget.filePath}`));
     console.log(`  Section: ${selected}`);
     return;
+  }
+}
+
+async function runNotionEdit(
+  opts: AddOptions,
+  cfg: ReturnType<typeof loadConfig>,
+  fallbackId: string | undefined,
+  fn: (cfgN: NonNullable<ReturnType<typeof loadConfig>['notion']>, pageId: string) => Promise<void>,
+): Promise<void> {
+  if (!cfg.notion?.enabled) {
+    throw new Error('notion adapter is not enabled in config');
+  }
+  const id = opts.id ?? fallbackId;
+  if (!id) {
+    throw new Error('Notion edit requires --id (atom id) since recent.json tracks Obsidian paths only.');
+  }
+  const found = await findNotionAtomById(cfg.notion, id);
+  if (!found) {
+    throw new Error(`Notion: atom not found by id=${id} (Title property)`);
+  }
+  await fn(cfg.notion, found.pageId);
+}
+
+function finalize(failures: string[], targets: string[]): void {
+  if (failures.length > 0) {
+    for (const f of failures) console.error(chalk.red(`✗ ${f}`));
+    process.exitCode = 1;
+    if (targets.length === 1) {
+      throw new Error(failures[0]);
+    }
   }
 }
 
