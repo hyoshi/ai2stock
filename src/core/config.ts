@@ -25,8 +25,9 @@ export const DEFAULT_CONFIG: Config = {
   defaults: {
     source: 'claude-code',
     confidence: 'medium',
+    primary_adapter: 'obsidian',
     primary_search_adapter: 'obsidian',
-    write_strategy: 'all',
+    write_strategy: 'primary_only',
   },
 };
 
@@ -56,7 +57,7 @@ export function configExists(configPath: string = DEFAULT_CONFIG_PATH): boolean 
 }
 
 function mergeWithDefaults(partial: Partial<Config>): Config {
-  return {
+  const merged: Config = {
     version: partial.version ?? DEFAULT_CONFIG.version,
     adapters: partial.adapters ?? DEFAULT_CONFIG.adapters,
     obsidian: {
@@ -72,4 +73,12 @@ function mergeWithDefaults(partial: Partial<Config>): Config {
       ...(partial.defaults ?? {}),
     },
   };
+  if (partial.notion) {
+    merged.notion = {
+      enabled: partial.notion.enabled ?? false,
+      token_env: partial.notion.token_env ?? 'NOTION_TOKEN',
+      database_id: partial.notion.database_id ?? '',
+    };
+  }
+  return merged;
 }

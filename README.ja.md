@@ -201,7 +201,7 @@ confidence: medium
 
 ```yaml
 version: 1
-adapters: [obsidian]
+adapters: [obsidian]              # 'notion' を追加すると Notion 併用
 obsidian:
   enabled: true
   vault_path: /path/to/your/vault
@@ -209,11 +209,59 @@ obsidian:
     atoms: 10-Atoms
     sessions: 20-Sessions
     moc: 00-MOC
+notion:                           # Notion を使う時のみ
+  enabled: true
+  token_env: NOTION_TOKEN
+  database_id: 1a2b3c...
 defaults:
   source: claude-code
   confidence: medium
+  primary_adapter: obsidian
+  write_strategy: primary_only    # primary_only | all | sequential
   default_project: my-project
 ```
+
+## Notion アダプタ（任意）
+
+Obsidian に加えて（または代わりに）Notion Database へも保存できます。
+
+### セットアップ
+
+1. https://www.notion.so/my-integrations で Integration を作成し、Token (`secret_xxx`) をコピー
+2. Notion で新規 Database を作成し、以下の Property を持たせる（追加のpropertyは自由）:
+
+   | Property | 型 |
+   |---|---|
+   | Title | Title |
+   | Type | Select |
+   | Tags | Multi-select |
+   | Project | Select |
+   | Session | Text |
+   | Created | Date |
+   | AI-Generated | Checkbox |
+   | Confidence | Select |
+
+3. Database の `... → Connections → 作成した Integration` を選んで接続
+4. Database URL 末尾の 32 文字が Database ID
+5. シェルに token を設定:
+   ```bash
+   echo 'export NOTION_TOKEN=secret_xxx' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+6. `ai2stock init` を再実行（Notionを「はい」で）か、`~/.config/ai2stock/config.yml` に上の `notion:` セクションを追記
+
+### アダプタの切替
+
+| やりたいこと | 方法 |
+|---|---|
+| Obsidian のみ（デフォルト） | デフォルト設定 |
+| 両方同時に書き込み | configで `write_strategy: all` |
+| Obsidian主、Notionは時々 | デフォルト + `/stock --to=notion`（その都度） |
+| このコマンドだけ Notion | `/stock --to=notion` |
+| このコマンドだけ Obsidian | `/stock --to=obsidian` |
+| このコマンドで両方 | `/stock --to=all` |
+
+編集系（`--append`, `--replace`, `--section`, `delete`）は現状 Obsidian のみ。Notion 編集対応は v0.4.1 予定。
 
 ## 開発
 

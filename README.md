@@ -201,7 +201,7 @@ confidence: medium
 
 ```yaml
 version: 1
-adapters: [obsidian]
+adapters: [obsidian]              # add 'notion' to also write to Notion
 obsidian:
   enabled: true
   vault_path: /path/to/your/vault
@@ -209,11 +209,59 @@ obsidian:
     atoms: 10-Atoms
     sessions: 20-Sessions
     moc: 00-MOC
+notion:                           # optional, only if you want Notion
+  enabled: true
+  token_env: NOTION_TOKEN
+  database_id: 1a2b3c...
 defaults:
   source: claude-code
   confidence: medium
+  primary_adapter: obsidian
+  write_strategy: primary_only    # primary_only | all | sequential
   default_project: my-project
 ```
+
+## Notion Adapter (optional)
+
+AI2Stock can write atoms to a Notion Database in addition to (or instead of) Obsidian.
+
+### Setup
+
+1. Create a Notion Integration at https://www.notion.so/my-integrations and copy the Internal Integration Token (`secret_xxx`).
+2. Create a new Notion Database with these properties (any extra are fine):
+
+   | Property | Type |
+   |---|---|
+   | Title | Title |
+   | Type | Select |
+   | Tags | Multi-select |
+   | Project | Select |
+   | Session | Text |
+   | Created | Date |
+   | AI-Generated | Checkbox |
+   | Confidence | Select |
+
+3. Open the Database, click `... → Connections → <your integration>` to grant access.
+4. Copy the Database ID (the last 32 characters in its URL).
+5. Set the token in your shell:
+   ```bash
+   echo 'export NOTION_TOKEN=secret_xxx' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+6. Either run `ai2stock init` again (and answer yes to Notion), or edit `~/.config/ai2stock/config.yml` to add the `notion:` section above.
+
+### Switching adapters
+
+| You want | What to do |
+|---|---|
+| Obsidian only (default) | Default config |
+| Both at once | `write_strategy: all` in config |
+| Obsidian primary, Notion sometimes | Default + `/stock --to=notion` per call |
+| This call: Notion only | `/stock --to=notion` |
+| This call: Obsidian only | `/stock --to=obsidian` |
+| This call: both | `/stock --to=all` |
+
+Edits (`--append`, `--replace`, `--section`, `delete`) currently apply to Obsidian only. Notion edit support is planned for v0.4.1.
 
 ## Development
 

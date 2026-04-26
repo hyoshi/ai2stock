@@ -6,6 +6,7 @@ import { buildAtomFromInput } from '../../core/intermediate.js';
 import { writeAtomToVault } from '../../adapters/obsidian/write.js';
 import { findRelatedAtoms, insertBacklinks } from '../../adapters/obsidian/backlink.js';
 import { updateProjectMoc } from '../../adapters/obsidian/moc.js';
+import { writeAtomToNotion } from '../../adapters/notion/write.js';
 import {
   appendToAtom,
   replaceAtomBody,
@@ -104,28 +105,66 @@ async function handleNewAtom(body: string, opts: AddOptions, cfg: ReturnType<typ
     return;
   }
 
-  const related = findRelatedAtoms(atom.frontmatter.tags || [], cfg.obsidian, atom.frontmatter.id, 10);
-  const result = writeAtomToVault(atom, cfg.obsidian, {
-    related: related.map((r) => r.frontmatter.id),
-  });
-
-  if (related.length > 0) {
-    insertBacklinks(related, atom.frontmatter.id);
+  const targets = resolveAdapterTargets(opts.to, cfg);
+  if (targets.length === 0) {
+    throw new Error('No enabled adapters to write to. Check config or --to flag.');
   }
 
-  const mocUpdated = updateProjectMoc(atom, cfg.obsidian);
+  let firstObsidianResult: { filePath: string; relativePath: string } | null = null;
+  let related: Array<{ frontmatter: { id: string } }> = [];
+  let mocUpdated = false;
+  const notionResults: Array<{ pageId: string; url: string }> = [];
 
-  recordAdd({
-    id: atom.frontmatter.id,
-    filePath: result.filePath,
-    type: atom.frontmatter.type,
-    title: atom.title,
-    project: atom.frontmatter.project,
-    tags: atom.frontmatter.tags,
-    created: atom.frontmatter.created,
-  });
+  for (const target of targets) {
+    if (target === 'obsidian') {
+      if (!cfg.obsidian.enabled) continue;
+      const found = findRelatedAtoms(atom.frontmatter.tags || [], cfg.obsidian, atom.frontmatter.id, 10);
+      related = found;
+      const result = writeAtomToVault(atom, cfg.obsidian, {
+        related: found.map((r) => r.frontmatter.id),
+      });
+      firstObsidianResult = { filePath: result.filePath, relativePath: result.relativePath };
+      if (found.length > 0) insertBacklinks(found, atom.frontmatter.id);
+      mocUpdated = updateProjectMoc(atom, cfg.obsidian);
+    } else if (target === 'notion') {
+      if (!cfg.notion?.enabled) {
+        console.warn(chalk.yellow('! notion target requested but adapter is disabled in config'));
+        continue;
+      }
+      try {
+        const r = await writeAtomToNotion(atom, cfg.notion);
+        notionResults.push(r);
+      } catch (e) {
+        console.error(chalk.red(`✗ notion write failed: ${(e as Error).message}`));
+      }
+    }
+  }
 
-  printSaveSummary(result.relativePath, atom, related, mocUpdated);
+  if (firstObsidianResult) {
+    recordAdd({
+      id: atom.frontmatter.id,
+      filePath: firstObsidianResult.filePath,
+      type: atom.frontmatter.type,
+      title: atom.title,
+      project: atom.frontmatter.project,
+      tags: atom.frontmatter.tags,
+      created: atom.frontmatter.created,
+    });
+  }
+
+  printSaveSummary(firstObsidianResult, atom, related, mocUpdated, notionResults);
+}
+
+function resolveAdapterTargets(toFlag: string | undefined, cfg: ReturnType<typeof loadConfig>): string[] {
+  if (toFlag) {
+    if (toFlag === 'all') return ['obsidian', 'notion'];
+    return toFlag.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  const strategy = cfg.defaults.write_strategy ?? 'primary_only';
+  const primary = cfg.defaults.primary_adapter ?? 'obsidian';
+  if (strategy === 'all') return ['obsidian', 'notion'];
+  if (strategy === 'sequential') return ['obsidian', 'notion'];
+  return [primary];
 }
 
 async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<typeof loadConfig>): Promise<void> {
@@ -220,12 +259,18 @@ function describeMode(opts: AddOptions): string {
 }
 
 function printSaveSummary(
-  relativePath: string,
+  obsidianResult: { relativePath: string } | null,
   atom: Atom,
   related: Array<{ frontmatter: { id: string } }>,
   mocUpdated: boolean,
+  notionResults: Array<{ pageId: string; url: string }>,
 ): void {
-  console.log(chalk.green(`✓ Saved: ${relativePath}`));
+  if (obsidianResult) {
+    console.log(chalk.green(`✓ Obsidian: ${obsidianResult.relativePath}`));
+  }
+  for (const n of notionResults) {
+    console.log(chalk.green(`✓ Notion:   ${n.url}`));
+  }
   console.log(`  Type: ${atom.frontmatter.type}`);
   if (atom.frontmatter.tags && atom.frontmatter.tags.length > 0) {
     console.log(`  Tags: ${atom.frontmatter.tags.join(', ')}`);

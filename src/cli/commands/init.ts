@@ -10,7 +10,7 @@ import {
   configExists,
   saveConfig,
 } from '../../core/config.js';
-import type { Config } from '../../core/types.js';
+import type { Config, NotionConfig } from '../../core/types.js';
 
 interface InitOptions {
   vault?: string;
@@ -62,6 +62,7 @@ export async function initCommand(opts: InitOptions): Promise<void> {
   }
 
   const project = await promptProject();
+  const notionCfg = await promptNotionOptional();
 
   const cfg: Config = {
     ...DEFAULT_CONFIG,
@@ -74,6 +75,10 @@ export async function initCommand(opts: InitOptions): Promise<void> {
       default_project: project || undefined,
     },
   };
+  if (notionCfg) {
+    cfg.notion = notionCfg;
+    cfg.adapters = ['obsidian', 'notion'];
+  }
 
   saveConfig(cfg);
   console.log(chalk.green(`✓ 設定保存: ${DEFAULT_CONFIG_PATH}`));
@@ -147,6 +152,47 @@ async function promptProject(): Promise<string | null> {
     message: 'デフォルトのプロジェクト名 (任意、Enterでスキップ)',
   });
   return project || null;
+}
+
+async function promptNotionOptional(): Promise<NotionConfig | null> {
+  const { enable } = await prompts({
+    type: 'confirm',
+    name: 'enable',
+    message: 'Notion アダプタも有効にしますか? (Notion DB に併記/個別保存可能)',
+    initial: false,
+  });
+  if (!enable) return null;
+
+  console.log(chalk.cyan('\nNotion セットアップ手順:'));
+  console.log('  1. https://www.notion.so/my-integrations で Integration 作成 → Token 取得');
+  console.log('  2. Notion で Database を新規作成（properties: Title, Type, Tags, Project, Session, Created, AI-Generated, Confidence）');
+  console.log('  3. Database 右上 ... → Connections → 作成した Integration を connect');
+  console.log('  4. Database URL の末尾 32文字が Database ID\n');
+
+  const { tokenEnv } = await prompts({
+    type: 'text',
+    name: 'tokenEnv',
+    message: 'Token を保存する環境変数名 (default: NOTION_TOKEN)',
+    initial: 'NOTION_TOKEN',
+  });
+  const { dbId } = await prompts({
+    type: 'text',
+    name: 'dbId',
+    message: 'Notion Database ID',
+    validate: (v: string) => (v && v.length >= 16 ? true : 'Database ID を入力してください'),
+  });
+
+  if (!process.env[tokenEnv]) {
+    console.log(chalk.yellow(`\n! ${tokenEnv} が現在の環境にありません。`));
+    console.log(chalk.yellow(`  シェル設定 (~/.zshrc 等) に export ${tokenEnv}=secret_xxx を追記してください。`));
+    console.log(chalk.yellow('  追記後シェル再起動 or source で反映してから ai2stock を使ってください。'));
+  }
+
+  return {
+    enabled: true,
+    token_env: tokenEnv || 'NOTION_TOKEN',
+    database_id: dbId,
+  };
 }
 
 function createVaultStructure(cfg: Config): void {

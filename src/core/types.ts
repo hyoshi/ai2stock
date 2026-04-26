@@ -37,9 +37,16 @@ export interface ObsidianConfig {
   folders: ObsidianFolders;
 }
 
+export interface NotionConfig {
+  enabled: boolean;
+  token_env: string;
+  database_id: string;
+}
+
 export interface ConfigDefaults {
   source: string;
   confidence: Confidence;
+  primary_adapter: string;
   primary_search_adapter: string;
   write_strategy: 'all' | 'primary_only' | 'sequential';
   default_project?: string;
@@ -49,6 +56,7 @@ export interface Config {
   version: number;
   adapters: string[];
   obsidian: ObsidianConfig;
+  notion?: NotionConfig;
   defaults: ConfigDefaults;
 }
 
