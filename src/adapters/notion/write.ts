@@ -15,8 +15,8 @@ export async function writeAtomToNotion(
   if (!cfg.enabled) {
     throw new Error('Notion adapter is disabled');
   }
-  if (!cfg.database_id) {
-    throw new Error('Notion database_id is not configured');
+  if (!cfg.parent_page_id) {
+    throw new Error('Notion parent_page_id is not configured');
   }
 
   const tokenEnv = tokenEnvOverride ?? cfg.token_env ?? 'NOTION_TOKEN';
@@ -30,13 +30,17 @@ export async function writeAtomToNotion(
 
   const client = new Client({ auth: token });
 
-  const properties = buildProperties(atom);
-  const children = buildBlocks(atom.body);
+  const properties = {
+    title: {
+      title: [{ type: 'text', text: { content: atom.frontmatter.id } }],
+    },
+  };
 
-  // The Notion SDK has very strict typed property/block schemas; we build
-  // properties/blocks dynamically from frontmatter, so cast to the SDK types here.
+  const children = [buildFrontmatterCallout(atom), ...buildBlocks(atom.body)];
+
+  // SDK uses ultra-strict discriminated unions; runtime-built shapes need cast.
   const response = await client.pages.create({
-    parent: { database_id: cfg.database_id },
+    parent: { page_id: cfg.parent_page_id },
     properties: properties as never,
     children: children as never,
   });
@@ -46,34 +50,26 @@ export async function writeAtomToNotion(
   return { pageId, url };
 }
 
-function buildProperties(atom: Atom): Record<string, unknown> {
+export function buildFrontmatterCallout(atom: Atom): Record<string, unknown> {
   const fm = atom.frontmatter;
-  const props: Record<string, unknown> = {
-    Title: {
-      title: [{ type: 'text', text: { content: fm.id } }],
+  const lines: string[] = [];
+  lines.push(`id: ${fm.id}`);
+  if (fm.type) lines.push(`type: ${fm.type}`);
+  if (fm.project) lines.push(`project: ${fm.project}`);
+  if (fm.session_name) lines.push(`session: ${fm.session_name}`);
+  if (fm.tags && fm.tags.length > 0) lines.push(`tags: ${fm.tags.join(', ')}`);
+  if (fm.confidence) lines.push(`confidence: ${fm.confidence}`);
+  if (fm.created) lines.push(`created: ${fm.created}`);
+  if (fm.updated) lines.push(`updated: ${fm.updated}`);
+  if (typeof fm['ai-generated'] === 'boolean') lines.push(`ai-generated: ${fm['ai-generated']}`);
+
+  return {
+    object: 'block',
+    type: 'callout',
+    callout: {
+      icon: { type: 'emoji', emoji: '📝' },
+      color: 'gray_background',
+      rich_text: [{ type: 'text', text: { content: lines.join('\n') } }],
     },
   };
-
-  if (fm.type) {
-    props.Type = { select: { name: fm.type } };
-  }
-  if (fm.tags && fm.tags.length > 0) {
-    props.Tags = { multi_select: fm.tags.slice(0, 100).map((t) => ({ name: t })) };
-  }
-  if (fm.project) {
-    props.Project = { select: { name: fm.project } };
-  }
-  if (fm.session_name) {
-    props.Session = { rich_text: [{ type: 'text', text: { content: fm.session_name } }] };
-  }
-  if (fm.created) {
-    props.Created = { date: { start: fm.created } };
-  }
-  if (typeof fm['ai-generated'] === 'boolean') {
-    props['AI-Generated'] = { checkbox: fm['ai-generated'] };
-  }
-  if (fm.confidence) {
-    props.Confidence = { select: { name: fm.confidence } };
-  }
-  return props;
 }

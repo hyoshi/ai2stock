@@ -158,16 +158,16 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
   const { enable } = await prompts({
     type: 'confirm',
     name: 'enable',
-    message: 'Notion アダプタも有効にしますか? (Notion DB に併記/個別保存可能)',
+    message: 'Notion アダプタも有効にしますか? (sidebar に各atomがファイルとして並ぶ)',
     initial: false,
   });
   if (!enable) return null;
 
   console.log(chalk.cyan('\nNotion セットアップ手順:'));
   console.log('  1. https://www.notion.so/my-integrations で Integration 作成 → Token 取得');
-  console.log('  2. Notion で Database を新規作成（properties: Title, Type, Tags, Project, Session, Created, AI-Generated, Confidence）');
-  console.log('  3. Database 右上 ... → Connections → 作成した Integration を connect');
-  console.log('  4. Database URL の末尾 32文字が Database ID\n');
+  console.log('  2. Notion で「親ページ」を1つ作成（例: 「AI2Stock Atoms」）');
+  console.log('  3. 親ページ右上 ... → Connections → 作成した Integration を connect');
+  console.log('  4. 親ページ URL の末尾 32文字が Parent Page ID\n');
 
   const { tokenEnv } = await prompts({
     type: 'text',
@@ -175,23 +175,23 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
     message: 'Token を保存する環境変数名 (default: NOTION_TOKEN)',
     initial: 'NOTION_TOKEN',
   });
-  const { dbId } = await prompts({
+  const { parentPageId } = await prompts({
     type: 'text',
-    name: 'dbId',
-    message: 'Notion Database ID',
-    validate: (v: string) => (v && v.length >= 16 ? true : 'Database ID を入力してください'),
+    name: 'parentPageId',
+    message: 'Notion Parent Page ID',
+    validate: (v: string) => (v && v.length >= 16 ? true : 'Parent Page ID を入力してください'),
   });
 
   if (!process.env[tokenEnv]) {
     console.log(chalk.yellow(`\n! ${tokenEnv} が現在の環境にありません。`));
-    console.log(chalk.yellow(`  シェル設定 (~/.zshrc 等) に export ${tokenEnv}=secret_xxx を追記してください。`));
+    console.log(chalk.yellow(`  シェル設定 (~/.bash_profile / ~/.zshrc 等) に export ${tokenEnv}=secret_xxx を追記してください。`));
     console.log(chalk.yellow('  追記後シェル再起動 or source で反映してから ai2stock を使ってください。'));
   }
 
   return {
     enabled: true,
     token_env: tokenEnv || 'NOTION_TOKEN',
-    database_id: dbId,
+    parent_page_id: parentPageId,
   };
 }
 

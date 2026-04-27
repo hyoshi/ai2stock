@@ -212,7 +212,7 @@ obsidian:
 notion:                           # Notion を使う時のみ
   enabled: true
   token_env: NOTION_TOKEN
-  database_id: 1a2b3c...
+  parent_page_id: 1a2b3c...       # atom を格納する Notion 親ページの ID
 defaults:
   source: claude-code
   confidence: medium
@@ -223,29 +223,24 @@ defaults:
 
 ## Notion アダプタ（任意）
 
-Obsidian に加えて（または代わりに）Notion Database へも保存できます。
+各 atom を Notion の **親ページ配下の child page** として保存します。Notion の sidebar に親ページを展開すると、各 atom がファイルのように並んで見えます。
+
+frontmatter（type / tags / project / session / confidence など）は各ページ先頭の callout block に埋め込まれます。
 
 ### セットアップ
 
-1. https://www.notion.so/my-integrations で Integration を作成し、Token (`secret_xxx`) をコピー
-2. Notion で新規 Database を作成し、以下の Property を持たせる（追加のpropertyは自由）:
-
-   | Property | 型 |
-   |---|---|
-   | Title | Title |
-   | Type | Select |
-   | Tags | Multi-select |
-   | Project | Select |
-   | Session | Text |
-   | Created | Date |
-   | AI-Generated | Checkbox |
-   | Confidence | Select |
-
-3. Database の `... → Connections → 作成した Integration` を選んで接続
-4. Database URL 末尾の 32 文字が Database ID
+1. https://www.notion.so/my-integrations で Integration を作成し、Token (`secret_xxx` または `ntn_xxx`) をコピー
+2. Notion で **親ページ**を1つ作成（例: 「AI2Stock Atoms」）
+3. 親ページの `... → Connections → 作成した Integration` を選んで接続
+4. 親ページ URL 末尾の 32 文字（`?v=` の前）が Parent Page ID
 5. シェルに token を設定:
    ```bash
-   echo 'export NOTION_TOKEN=secret_xxx' >> ~/.zshrc
+   # bash (macOS Terminal は login shell → .bash_profile)
+   echo 'export NOTION_TOKEN=ntn_xxx' >> ~/.bash_profile
+   source ~/.bash_profile
+
+   # または zsh
+   echo 'export NOTION_TOKEN=ntn_xxx' >> ~/.zshrc
    source ~/.zshrc
    ```
 6. `ai2stock init` を再実行（Notionを「はい」で）か、`~/.config/ai2stock/config.yml` に上の `notion:` セクションを追記

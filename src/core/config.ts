@@ -74,10 +74,19 @@ function mergeWithDefaults(partial: Partial<Config>): Config {
     },
   };
   if (partial.notion) {
+    const legacyDbId = (partial.notion as { database_id?: string }).database_id;
+    if (legacyDbId && !partial.notion.parent_page_id) {
+      throw new Error(
+        'Notion config uses legacy `database_id` (v0.4 DB mode). v0.5 switched to pages-tree mode and requires `parent_page_id`. ' +
+          'Migration: in Notion create a parent page (e.g. "AI2Stock Atoms"), connect your integration, ' +
+          'then in ~/.config/ai2stock/config.yml replace `database_id: ...` with `parent_page_id: <parent-page-id>`. ' +
+          'See README "Notion Adapter" section for details.',
+      );
+    }
     merged.notion = {
       enabled: partial.notion.enabled ?? false,
       token_env: partial.notion.token_env ?? 'NOTION_TOKEN',
-      database_id: partial.notion.database_id ?? '',
+      parent_page_id: partial.notion.parent_page_id ?? '',
     };
   }
   return merged;

@@ -10,7 +10,7 @@ export interface NotionAtomRef {
 
 function getClient(cfg: NotionConfig, tokenEnvOverride?: string): Client {
   if (!cfg.enabled) throw new Error('Notion adapter is disabled');
-  if (!cfg.database_id) throw new Error('Notion database_id is not configured');
+  if (!cfg.parent_page_id) throw new Error('Notion parent_page_id is not configured');
   const tokenEnv = tokenEnvOverride ?? cfg.token_env ?? 'NOTION_TOKEN';
   const token = process.env[tokenEnv];
   if (!token) {
@@ -22,26 +22,57 @@ function getClient(cfg: NotionConfig, tokenEnvOverride?: string): Client {
   return new Client({ auth: token });
 }
 
+function normalizeNotionId(id: string): string {
+  return id.replace(/-/g, '').toLowerCase();
+}
+
+function extractPlainTitle(page: unknown): string {
+  const props = (page as { properties?: Record<string, unknown> }).properties;
+  if (!props) return '';
+  for (const key of Object.keys(props)) {
+    const prop = props[key] as { type?: string; title?: Array<{ plain_text?: string }> };
+    if (prop?.type === 'title' && Array.isArray(prop.title)) {
+      return prop.title.map((t) => t.plain_text ?? '').join('');
+    }
+  }
+  return '';
+}
+
 export async function findNotionAtomById(
   cfg: NotionConfig,
   id: string,
   tokenEnvOverride?: string,
 ): Promise<NotionAtomRef | null> {
   const client = getClient(cfg, tokenEnvOverride);
-  const response = await client.databases.query({
-    database_id: cfg.database_id,
-    filter: {
-      property: 'Title',
-      title: { equals: id },
-    } as never,
-    page_size: 1,
+
+  // Notion has no per-parent listing API for child pages, so use search.
+  // Then verify the matched page is a child of the configured parent page.
+  const response = await client.search({
+    query: id,
+    filter: { property: 'object', value: 'page' },
+    page_size: 100,
   });
 
-  const results = (response as { results: Array<{ id: string; url?: string }> }).results;
-  if (results.length === 0) return null;
-  const page = results[0];
-  const url = page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`;
-  return { pageId: page.id, title: id, url };
+  const results = (response as { results: Array<{ id: string; url?: string; parent?: { type?: string; page_id?: string } }>; has_more?: boolean }).results;
+  if ((response as { has_more?: boolean }).has_more) {
+    console.warn(
+      `[ai2stock] Notion: search returned 100+ matches for "${id}"; only the first page is scanned. ` +
+        `If the atom is not found, narrow the title or implement search pagination (v0.5.1).`,
+    );
+  }
+  const cfgParent = normalizeNotionId(cfg.parent_page_id);
+
+  for (const page of results) {
+    const title = extractPlainTitle(page);
+    if (title !== id) continue;
+    const parentType = page.parent?.type;
+    const parentPageId = page.parent?.page_id ? normalizeNotionId(page.parent.page_id) : '';
+    if (parentType === 'page_id' && parentPageId === cfgParent) {
+      const url = page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`;
+      return { pageId: page.id, title: id, url };
+    }
+  }
+  return null;
 }
 
 export async function appendToNotionAtom(
@@ -67,7 +98,6 @@ export async function replaceNotionAtomBody(
 ): Promise<void> {
   const client = getClient(cfg, tokenEnvOverride);
 
-  // 1. List existing children (paginated, cap at 20 pages = 2000 blocks)
   const PAGE_CAP = 20;
   const existingIds: string[] = [];
   let cursor: string | undefined = undefined;
@@ -93,8 +123,6 @@ export async function replaceNotionAtomBody(
     console.warn(`[ai2stock] Notion: page has more than ${PAGE_CAP * 100} child blocks; older blocks will not be deleted in this replace.`);
   }
 
-  // 2. Delete each existing block. Collect failures; abort if any to avoid
-  //    leaving the page in a mixed (old + new) state.
   const deleteFailures: Array<{ id: string; reason: string }> = [];
   for (const blockId of existingIds) {
     try {
@@ -114,7 +142,6 @@ export async function replaceNotionAtomBody(
     );
   }
 
-  // 3. Append new blocks
   const newBlocks = buildBlocks(content);
   if (newBlocks.length === 0) return;
   await client.blocks.children.append({
@@ -130,18 +157,18 @@ export async function archiveNotionAtom(
 ): Promise<void> {
   const client = getClient(cfg, tokenEnvOverride);
 
-  // Defense-in-depth: verify pageId actually belongs to the configured DB
-  // before archiving. Prevents accidental archive of arbitrary pages the
-  // integration has access to.
+  // Defense-in-depth: verify pageId actually belongs to the configured parent
+  // page before archiving. Prevents accidental archive of arbitrary pages
+  // the integration has access to.
   try {
     const page = await client.pages.retrieve({ page_id: pageId });
-    const parent = (page as { parent?: { type?: string; database_id?: string } }).parent;
-    const parentDbRaw = parent?.database_id ?? '';
-    const parentDbNorm = parentDbRaw.replace(/-/g, '').toLowerCase();
-    const cfgDbNorm = cfg.database_id.replace(/-/g, '').toLowerCase();
-    if (parent?.type !== 'database_id' || parentDbNorm !== cfgDbNorm) {
+    const parent = (page as { parent?: { type?: string; page_id?: string } }).parent;
+    const parentPageRaw = parent?.page_id ?? '';
+    const parentNorm = normalizeNotionId(parentPageRaw);
+    const cfgNorm = normalizeNotionId(cfg.parent_page_id);
+    if (parent?.type !== 'page_id' || parentNorm !== cfgNorm) {
       throw new Error(
-        `Refusing to archive page outside configured DB. page parent=${parentDbRaw}, expected=${cfg.database_id}`,
+        `Refusing to archive page outside configured parent. page parent=${parentPageRaw}, expected=${cfg.parent_page_id}`,
       );
     }
   } catch (e) {

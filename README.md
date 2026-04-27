@@ -212,7 +212,7 @@ obsidian:
 notion:                           # optional, only if you want Notion
   enabled: true
   token_env: NOTION_TOKEN
-  database_id: 1a2b3c...
+  parent_page_id: 1a2b3c...       # ID of the Notion page that holds your atoms
 defaults:
   source: claude-code
   confidence: medium
@@ -223,29 +223,24 @@ defaults:
 
 ## Notion Adapter (optional)
 
-AI2Stock can write atoms to a Notion Database in addition to (or instead of) Obsidian.
+AI2Stock writes each atom as a **child page under a parent page** in Notion. This means each atom appears as a separate file-like entry in Notion's left sidebar (when you expand the parent).
+
+Frontmatter (type / tags / project / session / confidence / etc.) is embedded as a callout block at the top of each page.
 
 ### Setup
 
-1. Create a Notion Integration at https://www.notion.so/my-integrations and copy the Internal Integration Token (`secret_xxx`).
-2. Create a new Notion Database with these properties (any extra are fine):
-
-   | Property | Type |
-   |---|---|
-   | Title | Title |
-   | Type | Select |
-   | Tags | Multi-select |
-   | Project | Select |
-   | Session | Text |
-   | Created | Date |
-   | AI-Generated | Checkbox |
-   | Confidence | Select |
-
-3. Open the Database, click `... → Connections → <your integration>` to grant access.
-4. Copy the Database ID (the last 32 characters in its URL).
+1. Create a Notion Integration at https://www.notion.so/my-integrations and copy the Internal Integration Token (`secret_xxx` or `ntn_xxx`).
+2. In Notion, create a **parent page** (e.g. "AI2Stock Atoms") that will hold all your atoms.
+3. Open the parent page, click `... → Connections → <your integration>` to grant access.
+4. Copy the Parent Page ID (the last 32 characters in its URL, before `?v=` if any).
 5. Set the token in your shell:
    ```bash
-   echo 'export NOTION_TOKEN=secret_xxx' >> ~/.zshrc
+   # bash (macOS Terminal opens login shell → .bash_profile)
+   echo 'export NOTION_TOKEN=ntn_xxx' >> ~/.bash_profile
+   source ~/.bash_profile
+
+   # or zsh
+   echo 'export NOTION_TOKEN=ntn_xxx' >> ~/.zshrc
    source ~/.zshrc
    ```
 6. Either run `ai2stock init` again (and answer yes to Notion), or edit `~/.config/ai2stock/config.yml` to add the `notion:` section above.

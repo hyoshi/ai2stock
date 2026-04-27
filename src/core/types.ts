@@ -40,7 +40,7 @@ export interface ObsidianConfig {
 export interface NotionConfig {
   enabled: boolean;
   token_env: string;
-  database_id: string;
+  parent_page_id: string;
 }
 
 export interface ConfigDefaults {
