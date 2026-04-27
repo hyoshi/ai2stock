@@ -1,6 +1,6 @@
 # AI2Stock
 
-> Stock AI conversations as Atomic Notes in your Obsidian Vault.
+> Stock AI conversations as Atomic Notes — in your Obsidian Vault, in Notion, or both.
 > Turn ephemeral chats into a searchable second brain.
 
 [日本語版 README](./README.ja.md)
@@ -9,28 +9,28 @@
 
 `/stock` your last (or any past) Claude Code response and AI2Stock will:
 
-1. Save it as a Markdown Atomic Note in your Obsidian Vault
+1. Save it as an Atomic Note in your chosen backend — **Obsidian Vault** (Markdown), **Notion** (page), or both
 2. Auto-classify the type (decision / snippet / learning / reference)
-3. Group it under the current Claude Code session folder
-4. Auto-link it to related notes by shared tags
-5. Update a project Map-of-Content
+3. Group it under the current Claude Code session (folder in Obsidian, sub-page in Notion)
+4. Auto-link it to related notes by shared tags (Obsidian)
+5. Update a project Map-of-Content (Obsidian)
 
 You can also `--append`, `--replace`, replace a single section, or delete — all by **natural-language commands**.
 
 ## Why?
 
-LLM agents have memory, but it's fragmented across sessions and not easy for humans to look back at. AI2Stock converts the **flow** of conversation into **stock** of knowledge — accessible, searchable, and yours.
+LLM agents have memory, but it's fragmented across sessions and not easy for humans to look back at. AI2Stock converts the **flow** of conversation into **stock** of knowledge — accessible, searchable, and yours. Pick the backend that fits your workflow: local Markdown (Obsidian), team-shared workspace (Notion), or both in parallel.
 
 ## Features
 
 - **`/stock` slash command** for Claude Code
 - **Natural-language operation**: `/stock 30分前のBYOD議論を保存` etc.
-- **Atomic Notes** in Obsidian Vault format (just plain Markdown + YAML frontmatter)
-- **Session-based folders**: each Claude Code session has its own folder
+- **Multi-backend**: Obsidian Vault (Markdown + YAML frontmatter) and/or Notion (pages tree, sidebar-visible)
+- **Per-call backend override**: `/stock --to=obsidian|notion|all`
+- **Session-based folders/sub-pages**: each Claude Code session has its own folder (Obsidian) or sub-page (Notion)
 - **Auto-classification**: decision / snippet / learning / reference
-- **Same-tag backlinks**: new atoms auto-link to related atoms
-- **Project MOC**: per-project index file auto-generated
-- **Symlink-safe path handling**, **atomic writes**, **TOCTOU race protection**
+- **Same-tag backlinks**, **Project MOC** (Obsidian)
+- **Symlink-safe path handling**, **atomic writes**, **TOCTOU race protection** (Obsidian)
 
 ## Install
 
@@ -39,7 +39,7 @@ LLM agents have memory, but it's fragmented across sessions and not easy for hum
 - **Node.js 20+** (`node -v` to check, install from [nodejs.org](https://nodejs.org/))
 - **npm** (bundled with Node.js)
 - **git** (most systems already have it)
-- **An Obsidian Vault** (a folder of `.md` files; Obsidian app itself is optional)
+- **A backend**: an **Obsidian Vault** (folder of `.md` files; Obsidian app itself optional) and/or a **Notion** workspace + Internal Integration token. At least one must be configured.
 - **Claude Code** if you want the `/stock` slash command
 
 ### One-liner (recommended)
@@ -56,6 +56,7 @@ What it does:
 3. Runs `ai2stock init` interactively:
    - Pick (or create) your Obsidian Vault path
    - Set a default project name (optional)
+   - Optionally enable Notion (token + parent page; see [Notion Adapter](#notion-adapter-optional))
    - Install `/stock` slash command into `~/.claude/commands/`
 
 After this, `/stock` is ready to use in Claude Code.
@@ -116,6 +117,7 @@ ai2stock init
 Interactive prompts:
 - Obsidian Vault path (auto-detected if you have one in common locations)
 - Default project name (optional)
+- Whether to enable Notion (token env + Parent Page ID — see [Notion Adapter](#notion-adapter-optional))
 - Whether to install the `/stock` slash command to `~/.claude/commands/`
 
 ### 2. Use it in Claude Code
@@ -126,11 +128,12 @@ In any Claude Code session, after the assistant gives a response you want to kee
 /stock
 ```
 
-The previous assistant response is saved to your Vault.
+The previous assistant response is saved to your configured backend(s) (Obsidian by default, Notion too if enabled). Override per call with `/stock --to=notion` or `/stock --to=all`.
 
 ### 3. Look it up later
 
-Open Obsidian → navigate to `<Vault>/10-Atoms/<session-name>/` → find your note.
+- **Obsidian**: open the Vault → `<Vault>/10-Atoms/<session-name>/` → find your note
+- **Notion**: open the parent page → `<session-name>` sub-page → atom page (visible in the sidebar)
 
 Or use the CLI:
 
