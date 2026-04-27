@@ -1,7 +1,7 @@
 # AI2Stock
 
-> AIとの会話を Obsidian や Notion に保存。
-> 流れ去るチャットを、検索できる「第二の脳」に。
+**AIとの会話を Obsidian や Notion に保存。**
+**流れ去るチャットを、検索できる「第二の脳」に。**
 
 [English README](./README.md)
 

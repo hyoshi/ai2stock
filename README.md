@@ -1,7 +1,7 @@
 # AI2Stock
 
-> Save your AI conversations to Obsidian or Notion.
-> Turn ephemeral chats into a searchable second brain.
+**Save your AI conversations to Obsidian or Notion.**
+**Turn ephemeral chats into a searchable second brain.**
 
 [日本語版 README](./README.ja.md)
 
