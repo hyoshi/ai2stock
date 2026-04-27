@@ -1,46 +1,47 @@
 # AI2Stock
 
-> Stock AI conversations as Atomic Notes — in your Obsidian Vault, in Notion, or both.
+> Save your AI conversations to Obsidian or Notion.
 > Turn ephemeral chats into a searchable second brain.
 
 [日本語版 README](./README.ja.md)
 
-## What is this?
+## What it does
 
-`/stock` your last (or any past) Claude Code response and AI2Stock will:
+Type `/stock` after any Claude Code response and AI2Stock will:
 
-1. Save it as an Atomic Note in your chosen backend — **Obsidian Vault** (Markdown), **Notion** (page), or both
-2. Auto-classify the type (decision / snippet / learning / reference)
-3. Group it under the current Claude Code session (folder in Obsidian, sub-page in Notion)
-4. Auto-link it to related notes by shared tags (Obsidian)
-5. Update a project Map-of-Content (Obsidian)
+1. Save it as an Atomic Note in your chosen backend — **Obsidian** (Markdown file), **Notion** (page), or both
+2. Auto-classify it: decision / snippet / learning / reference
+3. File it under the current Claude Code session (folder in Obsidian, sub-page in Notion)
+4. Auto-link to related notes by shared tags *(Obsidian)*
+5. Update a project Map-of-Content *(Obsidian)*
 
-You can also `--append`, `--replace`, replace a single section, or delete — all by **natural-language commands**.
+Append, replace, edit a single section, or delete — all by **natural-language commands**.
 
-## Why?
+## Why
 
-LLM agents have memory, but it's fragmented across sessions and not easy for humans to look back at. AI2Stock converts the **flow** of conversation into **stock** of knowledge — accessible, searchable, and yours. Pick the backend that fits your workflow: local Markdown (Obsidian), team-shared workspace (Notion), or both in parallel.
+LLM conversations flow past and disappear. AI2Stock turns that **flow** into **stock** — a searchable knowledge base you own. Local Markdown (Obsidian), team-shared workspace (Notion), or both in parallel.
 
 ## Features
 
 - **`/stock` slash command** for Claude Code
-- **Natural-language operation**: `/stock 30分前のBYOD議論を保存` etc.
-- **Multi-backend**: Obsidian Vault (Markdown + YAML frontmatter) and/or Notion (pages tree, sidebar-visible)
+- **Natural language**: `/stock 30分前のBYOD議論を保存` etc.
+- **Two backends**: Obsidian (Markdown + YAML frontmatter) and Notion (pages tree, sidebar-visible)
 - **Per-call backend override**: `/stock --to=obsidian|notion|all`
-- **Session-based folders/sub-pages**: each Claude Code session has its own folder (Obsidian) or sub-page (Notion)
+- **Per-session folders / sub-pages** auto-created
 - **Auto-classification**: decision / snippet / learning / reference
-- **Same-tag backlinks**, **Project MOC** (Obsidian)
-- **Symlink-safe path handling**, **atomic writes**, **TOCTOU race protection** (Obsidian)
+- **Same-tag backlinks** + **Project MOC** *(Obsidian)*
+- **Symlink-safe paths**, **atomic writes**, **TOCTOU race protection** *(Obsidian)*
 
 ## Install
 
 ### Prerequisites
 
-- **Node.js 20+** (`node -v` to check, install from [nodejs.org](https://nodejs.org/))
-- **npm** (bundled with Node.js)
-- **git** (most systems already have it)
-- **A backend**: an **Obsidian Vault** (folder of `.md` files; Obsidian app itself optional) and/or a **Notion** workspace + Internal Integration token. At least one must be configured.
-- **Claude Code** if you want the `/stock` slash command
+- **Node.js 20+** — [nodejs.org](https://nodejs.org/)
+- **git**
+- **At least one backend**:
+  - **Obsidian Vault** — any folder of `.md` files (the Obsidian app itself is optional), OR
+  - **Notion** workspace + Internal Integration token
+- **Claude Code** — to use the `/stock` slash command
 
 ### One-liner (recommended)
 
@@ -48,22 +49,19 @@ LLM agents have memory, but it's fragmented across sessions and not easy for hum
 curl -fsSL https://raw.githubusercontent.com/hyoshi/ai2stock/main/install.sh | bash
 ```
 
-What it does:
+The script will:
 
-1. Verifies Node 20+, npm, git are present
-2. Runs `npm install -g github:hyoshi/ai2stock`
-   (the `prepare` script auto-builds `dist/` from TypeScript)
-3. Runs `ai2stock init` interactively:
-   - Pick (or create) your Obsidian Vault path
-   - Set a default project name (optional)
-   - Optionally enable Notion (token + parent page; see [Notion Adapter](#notion-adapter-optional))
-   - Install `/stock` slash command into `~/.claude/commands/`
+1. Check Node.js 20+, npm, git
+2. `npm install -g github:hyoshi/ai2stock` (TypeScript builds via `prepare`)
+3. Run `ai2stock init` to set:
+   - Obsidian Vault path
+   - Default project name (optional)
+   - Notion enable + Parent Page ID (optional — see [Notion Adapter](#notion-adapter-optional))
+   - `/stock` slash command into `~/.claude/commands/`
 
-After this, `/stock` is ready to use in Claude Code.
+`/stock` is then ready in Claude Code.
 
 ### Manual
-
-If you prefer to run the steps yourself:
 
 ```bash
 npm install -g github:hyoshi/ai2stock
@@ -85,10 +83,10 @@ ai2stock init
 
 | Symptom | Fix |
 |---|---|
-| `ai2stock: command not found` after install | Check `npm config get prefix` — the `bin/` subdirectory must be on your `PATH` |
-| `Node.js 20+ required` | Upgrade Node.js (e.g. via [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm)) |
-| `EACCES` on `npm install -g` | Use a Node version manager (nvm/fnm) or set a user-writable npm prefix; do **not** use `sudo` |
-| `/stock` not found in Claude Code | Re-run `ai2stock init` to (re-)install the slash command |
+| `ai2stock: command not found` | `npm config get prefix`'s `bin/` must be on your `PATH` |
+| `Node.js 20+ required` | Upgrade Node.js — e.g. [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm) |
+| `EACCES` on `npm install -g` | Use a Node version manager or set a user-writable npm prefix. **Do not use `sudo`** |
+| `/stock` not found in Claude Code | Re-run `ai2stock init` |
 
 ### Update
 
@@ -96,14 +94,14 @@ ai2stock init
 npm install -g github:hyoshi/ai2stock
 ```
 
-(re-running pulls the latest commit from `main`.)
+Re-running pulls the latest commit from `main`.
 
 ### Uninstall
 
 ```bash
 npm uninstall -g @yoshinaga/ai2stock
 rm -f ~/.claude/commands/stock.md
-rm -rf ~/.config/ai2stock        # config + recent.json (vault is untouched)
+rm -rf ~/.config/ai2stock        # config + recent.json (your Vault is not deleted)
 ```
 
 ## Quick Start
@@ -115,10 +113,10 @@ ai2stock init
 ```
 
 Interactive prompts:
-- Obsidian Vault path (auto-detected if you have one in common locations)
-- Default project name (optional)
-- Whether to enable Notion (token env + Parent Page ID — see [Notion Adapter](#notion-adapter-optional))
-- Whether to install the `/stock` slash command to `~/.claude/commands/`
+- Obsidian Vault path — auto-detected if in a common location
+- Default project name *(optional)*
+- Enable Notion? — token env + Parent Page ID (see [Notion Adapter](#notion-adapter-optional))
+- Install the `/stock` slash command to `~/.claude/commands/`?
 
 ### 2. Use it in Claude Code
 
