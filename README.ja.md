@@ -227,7 +227,7 @@ defaults:
 Notion 内の構造は以下の2階層:
 
 ```
-<セッション名 ページ>          ← workspace 直下 or parent_page_id 配下
+<セッション名 ページ>          ← parent_page_id 配下（parent モード）または workspace 直下（workspace モード）
   └── <atom-id ページ>          ← atom 本体（sidebar に表示）
 ```
 
@@ -235,17 +235,21 @@ frontmatter（type / tags / project / session / confidence など）は atom ペ
 
 2つのモードがあります:
 
-- **workspace 直下モード**（個人利用推奨）: セッション名のページを Notion workspace 直下に置く。`parent_page_id` 設定不要。各セッション名のページを 1回だけ Notion で手動作成し Integration に共有。
-- **parent 配下モード**（共有 workspace 推奨）: `parent_page_id` を config に設定。AI2Stock がその下にセッション名ページを自動作成。
+- **parent モード**（推奨・Obsidian と同等）: `parent_page_id` を 1 つの親ページ（例: 「AI2Stock」）に設定。Claude Code のセッションごとにそのサブページを AI2Stock が**自動作成** — Obsidian の `10-Atoms/<セッション名>/` と同じ運用。手動作業は親ページの初回作成 1 回のみ。
+- **workspace 直下モード**（制約のある workspace 用 fallback）: `parent_page_id` 省略。セッション名と同タイトルの top-level ページを**毎セッション分手動作成**して Integration に共有する必要がある。共有された親ページを置けないとき以外は parent モードを推奨。
+
+> **マイグレーション注意**: v0.5.0–v0.5.2（`parent_page_id` 配下に atom がフラット or セッションツリーで配置）から workspace モード（`parent_page_id` を外す）に切り替えると、既存 atom は `--id`/`delete` で到達できなくなります。`parent_page_id` を維持するか、モード切替前に手動移行してください。
+
+> **workspace モードのセキュリティ注意**: workspace モードでは AI2Stock はセッション名と一致しかつ Integration がアクセスできる任意の top-level ページを操作対象にします。AI2Stock Integration を関係ない top-level ページに共有しないでください。
 
 ### セットアップ
 
 1. https://www.notion.so/my-integrations で Integration を作成し、Token (`secret_xxx` または `ntn_xxx`) をコピー
 2. Notion で:
-   - **workspace モード**: セッション名と同じタイトルの top-level ページを作成（例: 「AI2Stock」）、または
-   - **parent モード**: 任意の親ページを作成（例: 「AI2Stock Atoms」）
+   - **parent モード（推奨）**: 任意の親ページを作成（例: 「AI2Stock」）。1 度だけ作れば以降のセッションごとのサブページは自動生成される、または
+   - **workspace モード（fallback）**: セッション名と同じタイトルの top-level ページを作成（例: 「AI2Stock」）。使うセッション名ごとに繰り返し必要
 3. ページの `... → Connections → 作成した Integration` を選んで接続
-4. （parent モードのみ）親ページ URL 末尾の 32 文字（`?v=` の前）が Parent Page ID
+4. （parent モード）親ページ URL 末尾の 32 文字（`?v=` の前）が Parent Page ID
 5. シェルに token を設定:
    ```bash
    # bash (macOS Terminal は login shell → .bash_profile)

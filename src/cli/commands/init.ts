@@ -165,9 +165,10 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
 
   console.log(chalk.cyan('\nNotion セットアップ手順:'));
   console.log('  1. https://www.notion.so/my-integrations で Integration 作成 → Token 取得');
-  console.log('  2. (任意) 親ページを使う場合: 親ページに Integration を connect');
-  console.log('     使わない場合: 各セッション名と同じタイトルの top-level ページを Notion で個別に作成し、それぞれに Integration を connect');
-  console.log('  3. ページ右上 ... → Connections → 作成した Integration を connect\n');
+  console.log('  2. ' + chalk.bold('Notion で親ページを 1 つ作成') + '（例:「AI2Stock」）');
+  console.log('     → セッションごとのサブページは AI2Stock が自動作成します（Obsidian と同じ挙動）');
+  console.log('  3. その親ページの「...」→ Connections → 作成した Integration を connect');
+  console.log('  4. （parent モードのみ）親ページ URL の末尾 32 文字（?v= の前）が Parent Page ID\n');
 
   const { tokenEnv } = await prompts({
     type: 'text',
@@ -178,8 +179,15 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
   const { parentPageId } = await prompts({
     type: 'text',
     name: 'parentPageId',
-    message: 'Notion Parent Page ID（任意・Enterでスキップ → セッション名ページを workspace 直下に配置）',
+    message: 'Notion Parent Page ID（推奨・空欄でworkspace直下モード）',
   });
+
+  if (!parentPageId || !parentPageId.trim()) {
+    console.log(chalk.yellow('\n! workspace 直下モードを選択しました。'));
+    console.log(chalk.yellow('  各セッション名と同じタイトルの top-level ページを Notion で個別作成し、'));
+    console.log(chalk.yellow('  それぞれを Integration に connect する手作業が以降必要です。'));
+    console.log(chalk.yellow('  Obsidian と同じ自動フォルダ体験を得るには、親ページを 1 つ作って Parent Page ID を設定してください。'));
+  }
 
   if (!process.env[tokenEnv]) {
     console.log(chalk.yellow(`\n! ${tokenEnv} が現在の環境にありません。`));
