@@ -45,8 +45,9 @@ export async function findNotionAtomById(
 ): Promise<NotionAtomRef | null> {
   const client = getClient(cfg, tokenEnvOverride);
 
-  // Notion has no per-parent listing API for child pages, so use search.
-  // Then verify the matched page is a child of the configured parent page.
+  // Tree: cfg.parent_page_id > <session-name> page > <atom> page.
+  // Notion has no per-parent listing API; use search by title then verify
+  // the matched atom's grandparent === cfg.parent_page_id.
   const response = await client.search({
     query: id,
     filter: { property: 'object', value: 'page' },
@@ -57,7 +58,7 @@ export async function findNotionAtomById(
   if ((response as { has_more?: boolean }).has_more) {
     console.warn(
       `[ai2stock] Notion: search returned 100+ matches for "${id}"; only the first page is scanned. ` +
-        `If the atom is not found, narrow the title or implement search pagination (v0.5.1).`,
+        `If the atom is not found, narrow the title or implement search pagination (future).`,
     );
   }
   const cfgParent = normalizeNotionId(cfg.parent_page_id);
@@ -65,12 +66,29 @@ export async function findNotionAtomById(
   for (const page of results) {
     const title = extractPlainTitle(page);
     if (title !== id) continue;
-    const parentType = page.parent?.type;
-    const parentPageId = page.parent?.page_id ? normalizeNotionId(page.parent.page_id) : '';
-    if (parentType === 'page_id' && parentPageId === cfgParent) {
+    if (page.parent?.type !== 'page_id') continue;
+    const immediateParent = page.parent.page_id ?? '';
+    if (!immediateParent) continue;
+
+    // Backward compat: pre-v0.5.1 atoms were placed flat under parent_page_id
+    // (no session sub-page). Accept those too.
+    if (normalizeNotionId(immediateParent) === cfgParent) {
       const url = page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`;
       return { pageId: page.id, title: id, url };
     }
+
+    // v0.5.1+: verify grandparent (session page's parent === cfg.parent_page_id).
+    try {
+      const sessionPage = await client.pages.retrieve({ page_id: immediateParent });
+      const grand = (sessionPage as { parent?: { type?: string; page_id?: string } }).parent;
+      if (grand?.type !== 'page_id') continue;
+      if (normalizeNotionId(grand.page_id ?? '') !== cfgParent) continue;
+    } catch (e) {
+      console.warn(`[ai2stock] Notion: failed to verify session parent for ${page.id}: ${(e as Error).message}`);
+      continue;
+    }
+    const url = page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`;
+    return { pageId: page.id, title: id, url };
   }
   return null;
 }
@@ -157,19 +175,33 @@ export async function archiveNotionAtom(
 ): Promise<void> {
   const client = getClient(cfg, tokenEnvOverride);
 
-  // Defense-in-depth: verify pageId actually belongs to the configured parent
-  // page before archiving. Prevents accidental archive of arbitrary pages
-  // the integration has access to.
+  // Defense-in-depth: verify pageId is in the tree
+  //   cfg.parent_page_id > session page > atom (v0.5.1+, current)
+  // OR
+  //   cfg.parent_page_id > atom (v0.5.0, backward compat)
+  // Prevents accidental archive of arbitrary pages the integration can reach.
+  const cfgNorm = normalizeNotionId(cfg.parent_page_id);
   try {
     const page = await client.pages.retrieve({ page_id: pageId });
     const parent = (page as { parent?: { type?: string; page_id?: string } }).parent;
-    const parentPageRaw = parent?.page_id ?? '';
-    const parentNorm = normalizeNotionId(parentPageRaw);
-    const cfgNorm = normalizeNotionId(cfg.parent_page_id);
-    if (parent?.type !== 'page_id' || parentNorm !== cfgNorm) {
+    if (parent?.type !== 'page_id' || !parent.page_id) {
       throw new Error(
-        `Refusing to archive page outside configured parent. page parent=${parentPageRaw}, expected=${cfg.parent_page_id}`,
+        `Refusing to archive page outside configured parent. page parent type=${parent?.type ?? 'unknown'}`,
       );
+    }
+    const immediateNorm = normalizeNotionId(parent.page_id);
+    if (immediateNorm === cfgNorm) {
+      // 1-level (legacy v0.5.0 flat atom) — accept.
+    } else {
+      // 2-level: session page must live under cfg.parent_page_id.
+      const sessionPage = await client.pages.retrieve({ page_id: parent.page_id });
+      const grand = (sessionPage as { parent?: { type?: string; page_id?: string } }).parent;
+      const grandNorm = normalizeNotionId(grand?.page_id ?? '');
+      if (grand?.type !== 'page_id' || grandNorm !== cfgNorm) {
+        throw new Error(
+          `Refusing to archive page outside configured parent. session parent=${grand?.page_id ?? ''}, expected=${cfg.parent_page_id}`,
+        );
+      }
     }
   } catch (e) {
     if ((e as Error).message?.startsWith('Refusing to archive')) throw e;

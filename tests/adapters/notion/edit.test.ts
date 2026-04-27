@@ -60,32 +60,52 @@ function pageResult(id: string, title: string, parentPageId: string, url = 'http
   };
 }
 
-describe('findNotionAtomById (pages mode)', () => {
+describe('findNotionAtomById (pages mode, session sub-page tree)', () => {
   it('returns null when search has no results', async () => {
     searchMock.mockResolvedValue({ results: [] });
     expect(await findNotionAtomById(cfg, 'missing-id')).toBeNull();
   });
 
-  it('returns matching page that is a direct child of parent_page_id', async () => {
+  it('returns matching page when grandparent === configured parent_page_id', async () => {
     searchMock.mockResolvedValue({
-      results: [pageResult('page-abc', '2026-04-26-test', 'parent-page-1234')],
+      results: [pageResult('atom-page', '2026-04-28-test', 'session-page-1')],
     });
-    const r = await findNotionAtomById(cfg, '2026-04-26-test');
-    expect(r?.pageId).toBe('page-abc');
+    retrieveMock.mockResolvedValueOnce({
+      parent: { type: 'page_id', page_id: 'parent-page-1234' },
+    });
+    const r = await findNotionAtomById(cfg, '2026-04-28-test');
+    expect(r?.pageId).toBe('atom-page');
+    expect(retrieveMock).toHaveBeenCalledWith({ page_id: 'session-page-1' });
   });
 
-  it('ignores pages with matching title but different parent', async () => {
+  it('ignores atom whose session parent is under a different workspace parent', async () => {
     searchMock.mockResolvedValue({
-      results: [pageResult('page-abc', '2026-04-26-test', 'OTHER-parent')],
+      results: [pageResult('atom-page', '2026-04-28-test', 'rogue-session')],
     });
-    expect(await findNotionAtomById(cfg, '2026-04-26-test')).toBeNull();
+    retrieveMock.mockResolvedValueOnce({
+      parent: { type: 'page_id', page_id: 'OTHER-parent' },
+    });
+    expect(await findNotionAtomById(cfg, '2026-04-28-test')).toBeNull();
+  });
+
+  it('ignores atom whose immediate parent is not page_id type', async () => {
+    searchMock.mockResolvedValue({
+      results: [
+        {
+          id: 'atom-page',
+          parent: { type: 'database_id', database_id: 'db-1' },
+          properties: { title: { type: 'title', title: [{ plain_text: '2026-04-28-test' }] } },
+        },
+      ],
+    });
+    expect(await findNotionAtomById(cfg, '2026-04-28-test')).toBeNull();
   });
 
   it('ignores pages with similar but non-equal titles', async () => {
     searchMock.mockResolvedValue({
-      results: [pageResult('page-abc', '2026-04-26-test-extra', 'parent-page-1234')],
+      results: [pageResult('atom', '2026-04-28-test-extra', 'session-1')],
     });
-    expect(await findNotionAtomById(cfg, '2026-04-26-test')).toBeNull();
+    expect(await findNotionAtomById(cfg, '2026-04-28-test')).toBeNull();
   });
 
   it('throws when adapter disabled', async () => {
@@ -94,6 +114,30 @@ describe('findNotionAtomById (pages mode)', () => {
 
   it('throws when parent_page_id missing', async () => {
     await expect(findNotionAtomById({ ...cfg, parent_page_id: '' }, 'x')).rejects.toThrow(/parent_page_id/);
+  });
+
+  it('backward compat: accepts pre-v0.5.1 atoms placed directly under parent_page_id', async () => {
+    // atom.parent === cfg.parent_page_id (no intermediate session page)
+    searchMock.mockResolvedValue({
+      results: [pageResult('legacy-atom', '2026-04-26-legacy', 'parent-page-1234')],
+    });
+    const r = await findNotionAtomById(cfg, '2026-04-26-legacy');
+    expect(r?.pageId).toBe('legacy-atom');
+    // No retrieve needed — direct match short-circuits the grandparent check
+    expect(retrieveMock).not.toHaveBeenCalled();
+  });
+
+  it('warns (not silent) when session retrieve fails during verify', async () => {
+    searchMock.mockResolvedValue({
+      results: [pageResult('atom-page', '2026-04-28-test', 'session-page-1')],
+    });
+    retrieveMock.mockRejectedValueOnce(new Error('network down'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = await findNotionAtomById(cfg, '2026-04-28-test');
+    expect(r).toBeNull();
+    const warns = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warns).toMatch(/failed to verify session parent/);
+    warnSpy.mockRestore();
   });
 });
 
@@ -172,39 +216,62 @@ describe('replaceNotionAtomBody', () => {
   });
 });
 
-describe('archiveNotionAtom (pages mode)', () => {
-  it('verifies page parent matches configured parent_page_id then archives', async () => {
-    retrieveMock.mockResolvedValue({
-      parent: { type: 'page_id', page_id: 'parent-page-1234' },
-    });
+describe('archiveNotionAtom (pages mode, 2-level verify)', () => {
+  it('verifies atom→session→parent_page_id then archives', async () => {
+    // 1st retrieve: atom page → parent is session page
+    // 2nd retrieve: session page → parent is configured parent_page_id
+    retrieveMock
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'parent-page-1234' } });
     updateMock.mockResolvedValue({});
-    await archiveNotionAtom(cfg, 'page-abc');
-    expect(retrieveMock).toHaveBeenCalledWith({ page_id: 'page-abc' });
-    expect(updateMock).toHaveBeenCalledWith({ page_id: 'page-abc', archived: true });
+
+    await archiveNotionAtom(cfg, 'atom-page-abc');
+
+    expect(retrieveMock).toHaveBeenNthCalledWith(1, { page_id: 'atom-page-abc' });
+    expect(retrieveMock).toHaveBeenNthCalledWith(2, { page_id: 'session-page-1' });
+    expect(updateMock).toHaveBeenCalledWith({ page_id: 'atom-page-abc', archived: true });
   });
 
-  it('refuses to archive when page parent differs from configured parent', async () => {
-    retrieveMock.mockResolvedValue({
-      parent: { type: 'page_id', page_id: 'OTHER-parent' },
-    });
-    await expect(archiveNotionAtom(cfg, 'page-abc')).rejects.toThrow(/outside configured parent/);
+  it('refuses to archive when session page is under a different workspace parent', async () => {
+    retrieveMock
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'OTHER-parent' } });
+    await expect(archiveNotionAtom(cfg, 'atom-page-abc')).rejects.toThrow(/outside configured parent/);
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it('refuses to archive when parent type is database (DB-mode page)', async () => {
-    retrieveMock.mockResolvedValue({
+  it('refuses to archive when atom parent type is not page_id', async () => {
+    retrieveMock.mockResolvedValueOnce({
       parent: { type: 'database_id', database_id: 'some-db' },
     });
-    await expect(archiveNotionAtom(cfg, 'page-abc')).rejects.toThrow(/outside configured parent/);
+    await expect(archiveNotionAtom(cfg, 'atom-page-abc')).rejects.toThrow(/outside configured parent/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses to archive when session page parent is database', async () => {
+    retrieveMock
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
+      .mockResolvedValueOnce({ parent: { type: 'database_id', database_id: 'db-1' } });
+    await expect(archiveNotionAtom(cfg, 'atom-page-abc')).rejects.toThrow(/outside configured parent/);
     expect(updateMock).not.toHaveBeenCalled();
   });
 
   it('treats hyphenated and stripped parent ids as equal', async () => {
-    retrieveMock.mockResolvedValue({
+    retrieveMock
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'parent-page-1234' } });
+    updateMock.mockResolvedValue({});
+    await archiveNotionAtom({ ...cfg, parent_page_id: 'PARENT-PAGE-1234' }, 'atom-page-abc');
+    expect(updateMock).toHaveBeenCalled();
+  });
+
+  it('backward compat: archives v0.5.0 flat atom (atom directly under parent_page_id)', async () => {
+    retrieveMock.mockResolvedValueOnce({
       parent: { type: 'page_id', page_id: 'parent-page-1234' },
     });
     updateMock.mockResolvedValue({});
-    await archiveNotionAtom({ ...cfg, parent_page_id: 'PARENT-PAGE-1234' }, 'page-abc');
-    expect(updateMock).toHaveBeenCalled();
+    await archiveNotionAtom(cfg, 'legacy-atom');
+    expect(retrieveMock).toHaveBeenCalledTimes(1); // no second retrieve
+    expect(updateMock).toHaveBeenCalledWith({ page_id: 'legacy-atom', archived: true });
   });
 });
