@@ -22,8 +22,8 @@ export function _resetSessionPageCache(): void {
   sessionPageInFlight.clear();
 }
 
-function cacheKey(parentPageId: string, sessionName: string): string {
-  return `${parentPageId}::${sessionName}`;
+function cacheKey(parentPageId: string | undefined, sessionName: string): string {
+  return parentPageId ? `p:${parentPageId}::${sessionName}` : `w::${sessionName}`;
 }
 
 function normalizeNotionId(id: string): string {
@@ -55,31 +55,51 @@ async function ensureSessionPage(
   if (inFlight) return inFlight;
 
   const promise = (async () => {
-    // Search for existing session page with matching title under parent_page_id.
+    // Search for existing session page with matching title.
     const response = await client.search({
       query: safeName,
       filter: { property: 'object', value: 'page' },
       page_size: 100,
     });
-    const results = (response as { results: Array<{ id: string; parent?: { type?: string; page_id?: string } }> }).results;
-    const cfgParent = normalizeNotionId(cfg.parent_page_id);
+    const results = (response as { results: Array<{ id: string; parent?: { type?: string; page_id?: string; workspace?: boolean } }> }).results;
+    const cfgParentNorm = cfg.parent_page_id ? normalizeNotionId(cfg.parent_page_id) : '';
     for (const page of results) {
       if (extractPlainTitle(page) !== safeName) continue;
-      if (page.parent?.type !== 'page_id') continue;
-      if (normalizeNotionId(page.parent.page_id ?? '') !== cfgParent) continue;
+      if (cfg.parent_page_id) {
+        // Constrained mode: session page must live directly under parent_page_id.
+        if (page.parent?.type !== 'page_id') continue;
+        if (normalizeNotionId(page.parent.page_id ?? '') !== cfgParentNorm) continue;
+      } else {
+        // Workspace-top-level mode: accept session pages at workspace root.
+        if (page.parent?.type !== 'workspace') continue;
+      }
       sessionPageCache.set(key, page.id);
       return page.id;
     }
-    // Not found: create a new session sub-page under parent_page_id.
-    const created = await client.pages.create({
-      parent: { page_id: cfg.parent_page_id },
-      properties: {
-        title: { title: [{ type: 'text', text: { content: safeName } }] },
-      } as never,
-    });
-    const newId = (created as { id: string }).id;
-    sessionPageCache.set(key, newId);
-    return newId;
+    // Not found: create a new session page.
+    try {
+      const created = await client.pages.create({
+        parent: cfg.parent_page_id
+          ? { page_id: cfg.parent_page_id }
+          : ({ type: 'workspace', workspace: true } as never),
+        properties: {
+          title: { title: [{ type: 'text', text: { content: safeName } }] },
+        } as never,
+      });
+      const newId = (created as { id: string }).id;
+      sessionPageCache.set(key, newId);
+      return newId;
+    } catch (e) {
+      if (!cfg.parent_page_id) {
+        throw new Error(
+          `Notion: cannot auto-create session page "${safeName}" at workspace top level. ` +
+            `Most internal integrations cannot create top-level pages. ` +
+            `Manually create a page titled "${safeName}" in Notion, share it with your integration, then retry. ` +
+            `Underlying error: ${(e as Error).message}`,
+        );
+      }
+      throw e;
+    }
   })();
 
   sessionPageInFlight.set(key, promise);
@@ -97,9 +117,6 @@ export async function writeAtomToNotion(
 ): Promise<NotionWriteResult> {
   if (!cfg.enabled) {
     throw new Error('Notion adapter is disabled');
-  }
-  if (!cfg.parent_page_id) {
-    throw new Error('Notion parent_page_id is not configured');
   }
 
   const tokenEnv = tokenEnvOverride ?? cfg.token_env ?? 'NOTION_TOKEN';

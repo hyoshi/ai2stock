@@ -63,8 +63,43 @@ describe('writeAtomToNotion (pages mode with session sub-page)', () => {
     await expect(writeAtomToNotion(makeAtom(), { ...cfg, enabled: false })).rejects.toThrow(/disabled/);
   });
 
-  it('throws if parent_page_id missing', async () => {
-    await expect(writeAtomToNotion(makeAtom(), { ...cfg, parent_page_id: '' })).rejects.toThrow(/parent_page_id/);
+  it('workspace-top-level mode: creates session at workspace root when parent_page_id absent', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    searchMock.mockResolvedValue({ results: [] });
+    createMock
+      .mockResolvedValueOnce({ id: 'session-id', url: 'x' })
+      .mockResolvedValueOnce({ id: 'atom-id', url: 'y' });
+
+    await writeAtomToNotion(makeAtom(), wsCfg);
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(createMock.mock.calls[0][0].parent.type).toBe('workspace');
+    expect(createMock.mock.calls[1][0].parent.page_id).toBe('session-id');
+  });
+
+  it('workspace-top-level mode: reuses existing session when found at workspace root', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    searchMock.mockResolvedValue({
+      results: [{
+        id: 'existing-session',
+        parent: { type: 'workspace', workspace: true },
+        properties: { title: { type: 'title', title: [{ plain_text: 'AI2Stock' }] } },
+      }],
+    });
+    createMock.mockResolvedValueOnce({ id: 'atom-id', url: 'x' });
+
+    await writeAtomToNotion(makeAtom(), wsCfg);
+
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(createMock.mock.calls[0][0].parent.page_id).toBe('existing-session');
+  });
+
+  it('workspace-top-level mode: helpful error if API rejects workspace create', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    searchMock.mockResolvedValue({ results: [] });
+    createMock.mockRejectedValueOnce(new Error('cannot create at workspace level'));
+
+    await expect(writeAtomToNotion(makeAtom(), wsCfg)).rejects.toThrow(/Manually create a page titled/);
   });
 
   it('creates session sub-page when not found, then atom under it', async () => {

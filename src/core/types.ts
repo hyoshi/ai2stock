@@ -40,7 +40,11 @@ export interface ObsidianConfig {
 export interface NotionConfig {
   enabled: boolean;
   token_env: string;
-  parent_page_id: string;
+  /**
+   * Optional. If set, session pages are created under this page.
+   * If absent, session pages are created/found at workspace top level.
+   */
+  parent_page_id?: string;
 }
 
 export interface ConfigDefaults {

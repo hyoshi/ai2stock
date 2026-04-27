@@ -112,8 +112,27 @@ describe('findNotionAtomById (pages mode, session sub-page tree)', () => {
     await expect(findNotionAtomById({ ...cfg, enabled: false }, 'x')).rejects.toThrow(/disabled/);
   });
 
-  it('throws when parent_page_id missing', async () => {
-    await expect(findNotionAtomById({ ...cfg, parent_page_id: '' }, 'x')).rejects.toThrow(/parent_page_id/);
+  it('workspace-top-level mode: accepts atom whose session parent is at workspace root', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    searchMock.mockResolvedValue({
+      results: [pageResult('atom-page', '2026-04-28-test', 'session-page-1')],
+    });
+    retrieveMock.mockResolvedValueOnce({
+      parent: { type: 'workspace', workspace: true },
+    });
+    const r = await findNotionAtomById(wsCfg, '2026-04-28-test');
+    expect(r?.pageId).toBe('atom-page');
+  });
+
+  it('workspace-top-level mode: rejects atom whose session is under another page', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    searchMock.mockResolvedValue({
+      results: [pageResult('atom-page', '2026-04-28-test', 'session-page-1')],
+    });
+    retrieveMock.mockResolvedValueOnce({
+      parent: { type: 'page_id', page_id: 'some-other-parent' },
+    });
+    expect(await findNotionAtomById(wsCfg, '2026-04-28-test')).toBeNull();
   });
 
   it('backward compat: accepts pre-v0.5.1 atoms placed directly under parent_page_id', async () => {
@@ -271,7 +290,25 @@ describe('archiveNotionAtom (pages mode, 2-level verify)', () => {
     });
     updateMock.mockResolvedValue({});
     await archiveNotionAtom(cfg, 'legacy-atom');
-    expect(retrieveMock).toHaveBeenCalledTimes(1); // no second retrieve
+    expect(retrieveMock).toHaveBeenCalledTimes(1);
     expect(updateMock).toHaveBeenCalledWith({ page_id: 'legacy-atom', archived: true });
+  });
+
+  it('workspace-top-level mode: archives when session parent is workspace', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    retrieveMock
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
+      .mockResolvedValueOnce({ parent: { type: 'workspace', workspace: true } });
+    updateMock.mockResolvedValue({});
+    await archiveNotionAtom(wsCfg, 'atom-page-abc');
+    expect(updateMock).toHaveBeenCalledWith({ page_id: 'atom-page-abc', archived: true });
+  });
+
+  it('workspace-top-level mode: refuses when session parent is not workspace', async () => {
+    const wsCfg: NotionConfig = { enabled: true, token_env: 'TEST_NOTION_TOKEN' };
+    retrieveMock
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
+      .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'some-random-page' } });
+    await expect(archiveNotionAtom(wsCfg, 'atom-page-abc')).rejects.toThrow(/outside workspace top level/);
   });
 });

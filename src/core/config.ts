@@ -86,7 +86,7 @@ function mergeWithDefaults(partial: Partial<Config>): Config {
     merged.notion = {
       enabled: partial.notion.enabled ?? false,
       token_env: partial.notion.token_env ?? 'NOTION_TOKEN',
-      parent_page_id: partial.notion.parent_page_id ?? '',
+      ...(partial.notion.parent_page_id ? { parent_page_id: partial.notion.parent_page_id } : {}),
     };
   }
   return merged;

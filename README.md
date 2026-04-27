@@ -212,7 +212,8 @@ obsidian:
 notion:                           # optional, only if you want Notion
   enabled: true
   token_env: NOTION_TOKEN
-  parent_page_id: 1a2b3c...       # ID of the Notion page that holds your atoms
+  # parent_page_id: 1a2b3c...     # OPTIONAL. If absent, session pages are
+                                  # created/found at workspace top level.
 defaults:
   source: claude-code
   confidence: medium
@@ -223,16 +224,32 @@ defaults:
 
 ## Notion Adapter (optional)
 
-AI2Stock writes each atom as a **child page under a parent page** in Notion. This means each atom appears as a separate file-like entry in Notion's left sidebar (when you expand the parent).
+AI2Stock organizes atoms in Notion as a 2-level tree:
 
-Frontmatter (type / tags / project / session / confidence / etc.) is embedded as a callout block at the top of each page.
+```
+<session-name page>            ← top-level (or under parent_page_id if set)
+  └── <atom-id page>           ← each atom; sidebar visibility
+```
+
+Frontmatter (type / tags / project / session / confidence / etc.) is embedded as a callout block at the top of each atom page.
+
+There are two layouts:
+
+- **Workspace-top-level mode** (recommended for personal use): session pages live at the top of your Notion workspace. No `parent_page_id` config needed. You manually create **one Notion page per session name** you intend to use (e.g. "AI2Stock") and connect your integration to each.
+
+> **Migration note**: if you upgrade from v0.5.0 (atoms placed flat under `parent_page_id`) and switch to workspace mode (drop `parent_page_id`), pre-existing atoms become unreachable via `--id`/`delete`. Either keep `parent_page_id` set, or migrate atoms manually before switching modes.
+
+> **Workspace-mode security note**: AI2Stock will operate on any workspace-top-level page that matches a session name and that the integration can access. Avoid sharing the AI2Stock integration with unrelated top-level pages.
+- **Constrained mode** (recommended for shared workspaces): set `parent_page_id` in config, and AI2Stock will create session pages under that parent.
 
 ### Setup
 
 1. Create a Notion Integration at https://www.notion.so/my-integrations and copy the Internal Integration Token (`secret_xxx` or `ntn_xxx`).
-2. In Notion, create a **parent page** (e.g. "AI2Stock Atoms") that will hold all your atoms.
-3. Open the parent page, click `... → Connections → <your integration>` to grant access.
-4. Copy the Parent Page ID (the last 32 characters in its URL, before `?v=` if any).
+2. In Notion, create either:
+   - **Workspace mode**: a top-level page titled exactly your session name (e.g. "AI2Stock"), OR
+   - **Constrained mode**: any page that will hold session sub-pages (e.g. "AI2Stock Atoms").
+3. Open the page, click `... → Connections → <your integration>` to grant access.
+4. (Constrained mode only) Copy the Parent Page ID (the last 32 characters in its URL, before `?v=` if any).
 5. Set the token in your shell:
    ```bash
    # bash (macOS Terminal opens login shell → .bash_profile)

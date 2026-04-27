@@ -165,9 +165,9 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
 
   console.log(chalk.cyan('\nNotion セットアップ手順:'));
   console.log('  1. https://www.notion.so/my-integrations で Integration 作成 → Token 取得');
-  console.log('  2. Notion で「親ページ」を1つ作成（例: 「AI2Stock Atoms」）');
-  console.log('  3. 親ページ右上 ... → Connections → 作成した Integration を connect');
-  console.log('  4. 親ページ URL の末尾 32文字が Parent Page ID\n');
+  console.log('  2. (任意) 親ページを使う場合: 親ページに Integration を connect');
+  console.log('     使わない場合: 各セッション名と同じタイトルの top-level ページを Notion で個別に作成し、それぞれに Integration を connect');
+  console.log('  3. ページ右上 ... → Connections → 作成した Integration を connect\n');
 
   const { tokenEnv } = await prompts({
     type: 'text',
@@ -178,8 +178,7 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
   const { parentPageId } = await prompts({
     type: 'text',
     name: 'parentPageId',
-    message: 'Notion Parent Page ID',
-    validate: (v: string) => (v && v.length >= 16 ? true : 'Parent Page ID を入力してください'),
+    message: 'Notion Parent Page ID（任意・Enterでスキップ → セッション名ページを workspace 直下に配置）',
   });
 
   if (!process.env[tokenEnv]) {
@@ -188,11 +187,14 @@ async function promptNotionOptional(): Promise<NotionConfig | null> {
     console.log(chalk.yellow('  追記後シェル再起動 or source で反映してから ai2stock を使ってください。'));
   }
 
-  return {
+  const cfg: NotionConfig = {
     enabled: true,
     token_env: tokenEnv || 'NOTION_TOKEN',
-    parent_page_id: parentPageId,
   };
+  if (parentPageId && parentPageId.trim()) {
+    cfg.parent_page_id = parentPageId.trim();
+  }
+  return cfg;
 }
 
 function createVaultStructure(cfg: Config): void {

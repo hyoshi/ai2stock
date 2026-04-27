@@ -212,7 +212,8 @@ obsidian:
 notion:                           # Notion を使う時のみ
   enabled: true
   token_env: NOTION_TOKEN
-  parent_page_id: 1a2b3c...       # atom を格納する Notion 親ページの ID
+  # parent_page_id: 1a2b3c...     # 任意。省略時は workspace 直下に
+                                  # session 名ページを作成/検索
 defaults:
   source: claude-code
   confidence: medium
@@ -223,16 +224,28 @@ defaults:
 
 ## Notion アダプタ（任意）
 
-各 atom を Notion の **親ページ配下の child page** として保存します。Notion の sidebar に親ページを展開すると、各 atom がファイルのように並んで見えます。
+Notion 内の構造は以下の2階層:
 
-frontmatter（type / tags / project / session / confidence など）は各ページ先頭の callout block に埋め込まれます。
+```
+<セッション名 ページ>          ← workspace 直下 or parent_page_id 配下
+  └── <atom-id ページ>          ← atom 本体（sidebar に表示）
+```
+
+frontmatter（type / tags / project / session / confidence など）は atom ページ先頭の callout block に埋め込まれます。
+
+2つのモードがあります:
+
+- **workspace 直下モード**（個人利用推奨）: セッション名のページを Notion workspace 直下に置く。`parent_page_id` 設定不要。各セッション名のページを 1回だけ Notion で手動作成し Integration に共有。
+- **parent 配下モード**（共有 workspace 推奨）: `parent_page_id` を config に設定。AI2Stock がその下にセッション名ページを自動作成。
 
 ### セットアップ
 
 1. https://www.notion.so/my-integrations で Integration を作成し、Token (`secret_xxx` または `ntn_xxx`) をコピー
-2. Notion で **親ページ**を1つ作成（例: 「AI2Stock Atoms」）
-3. 親ページの `... → Connections → 作成した Integration` を選んで接続
-4. 親ページ URL 末尾の 32 文字（`?v=` の前）が Parent Page ID
+2. Notion で:
+   - **workspace モード**: セッション名と同じタイトルの top-level ページを作成（例: 「AI2Stock」）、または
+   - **parent モード**: 任意の親ページを作成（例: 「AI2Stock Atoms」）
+3. ページの `... → Connections → 作成した Integration` を選んで接続
+4. （parent モードのみ）親ページ URL 末尾の 32 文字（`?v=` の前）が Parent Page ID
 5. シェルに token を設定:
    ```bash
    # bash (macOS Terminal は login shell → .bash_profile)
