@@ -303,12 +303,6 @@ npm run dev      # tsx (no build needed)
 
 TDD with vitest. All current tests pass; new features land with tests.
 
-## Roadmap
-
-- v0.4: Notion adapter, `/recall` search command
-- v0.5: MCP server (works in Claude Desktop, Cursor, Cline, etc.)
-- v0.6: AI-merge for partial updates
-
 ## License
 
 MIT

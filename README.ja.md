@@ -303,12 +303,6 @@ npm run dev      # tsx（ビルド不要）
 
 TDD（vitest）。全テスト GREEN 維持、新機能はテストとセットで追加。
 
-## ロードマップ
-
-- v0.4: Notion アダプタ、`/recall` 検索コマンド
-- v0.5: MCP サーバー化（Claude Desktop / Cursor / Cline 等で動作）
-- v0.6: 部分更新の AI-merge
-
 ## ライセンス
 
 MIT
