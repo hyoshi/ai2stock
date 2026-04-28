@@ -17,6 +17,7 @@
   "files": [
     "dist",
     "commands",
+    "skills",
     "templates",
     "README.md",
     "LICENSE"

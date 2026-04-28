@@ -18,13 +18,14 @@ interface InitOptions {
   force?: boolean;
 }
 
-const COMMANDS_SOURCE = path.resolve(
+const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
   '..',
-  'commands',
 );
+const COMMANDS_SOURCE = path.join(PACKAGE_ROOT, 'commands');
+const SKILLS_SOURCE = path.join(PACKAGE_ROOT, 'skills');
 
 export async function initCommand(opts: InitOptions): Promise<void> {
   console.log(chalk.bold.cyan('AI2Stock 初期設定\n'));
@@ -222,24 +223,39 @@ function createVaultStructure(cfg: Config): void {
 }
 
 function installSlashCommand(): void {
-  const targetDir = path.join(os.homedir(), '.claude', 'commands');
-  fs.mkdirSync(targetDir, { recursive: true });
+  const claudeRoot = path.join(os.homedir(), '.claude');
 
-  const sourceFile = path.join(COMMANDS_SOURCE, 'stock.md');
-  const targetFile = path.join(targetDir, 'stock.md');
-
-  if (!fs.existsSync(sourceFile)) {
+  // 1) Skill 形式（Cowork / 最新 Claude Code 推奨）
+  const skillDir = path.join(claudeRoot, 'skills', 'stock');
+  const skillSource = path.join(SKILLS_SOURCE, 'stock', 'SKILL.md');
+  const skillTarget = path.join(skillDir, 'SKILL.md');
+  if (fs.existsSync(skillSource)) {
+    fs.mkdirSync(skillDir, { recursive: true });
+    if (fs.existsSync(skillTarget)) {
+      console.log(chalk.yellow(`! ${skillTarget} already exists — skipped`));
+    } else {
+      fs.copyFileSync(skillSource, skillTarget);
+      console.log(chalk.green(`✓ /stock skill を ${skillTarget} にインストール`));
+    }
+  } else {
     console.log(
-      chalk.yellow(`! slash command source not found at ${sourceFile} — skipped`),
+      chalk.yellow(`! skill source not found at ${skillSource} — skipped`),
     );
-    return;
   }
 
-  if (fs.existsSync(targetFile)) {
-    console.log(chalk.yellow(`! ${targetFile} already exists — skipped`));
-    return;
+  // 2) 旧 commands 形式（後方互換: 旧 Claude Code）
+  const commandsDir = path.join(claudeRoot, 'commands');
+  const commandsSource = path.join(COMMANDS_SOURCE, 'stock.md');
+  const commandsTarget = path.join(commandsDir, 'stock.md');
+  if (fs.existsSync(commandsSource)) {
+    fs.mkdirSync(commandsDir, { recursive: true });
+    if (fs.existsSync(commandsTarget)) {
+      console.log(chalk.yellow(`! ${commandsTarget} already exists — skipped`));
+    } else {
+      fs.copyFileSync(commandsSource, commandsTarget);
+      console.log(
+        chalk.green(`✓ /stock command (legacy) を ${commandsTarget} にインストール`),
+      );
+    }
   }
-
-  fs.copyFileSync(sourceFile, targetFile);
-  console.log(chalk.green(`✓ /stock コマンドを ${targetFile} にインストール`));
 }
