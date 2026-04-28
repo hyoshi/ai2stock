@@ -24,7 +24,7 @@ LLM conversations flow past and disappear. AI2Stock turns that **flow** into **s
 ## Features
 
 - **`/stock` slash command** for Claude Code
-- **Natural language**: `/stock 先ほどの仕様書を今の内容で更新` etc.
+- **Natural language**: `/stock update the spec atom with the current content` etc.
 - **Two backends**: Obsidian (Markdown + YAML frontmatter) and Notion (pages tree, sidebar-visible)
 - **Per-call backend override**: `/stock --to=obsidian|notion|all`
 - **Per-session folders / sub-pages** auto-created
@@ -151,7 +151,7 @@ ai2stock list --project=ai2stock
 | `/stock 追記` | Append to the most recent atom |
 | `/stock 置換` | Replace the most recent atom |
 | `/stock <atom name>を更新` | Find and replace a specific atom (with confirmation) |
-| `/stock 先ほどの仕様書を今の内容で更新` | Update an existing atom using the current conversation |
+| `/stock update the spec atom with the current content` | Update an existing atom using the current conversation |
 | `/stock <atom name>削除` | Delete a specific atom (with confirmation) |
 | `/stock --dry-run` | Preview without saving |
 
