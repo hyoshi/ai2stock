@@ -1,6 +1,6 @@
 ---
 name: stock
-description: Save the previous AI response as an Atomic Note in Obsidian or Notion via AI2Stock. Use when the user types /stock or asks to save / append / replace / delete an AI response. Supports natural language ("直前の回答を保存", "30分前のBYOD議論を保存", "<atom名>を更新") and explicit flags (--append, --replace, --section, --id, --dry-run, --type, --tags, --project, --confidence, --title, --delete).
+description: Save the previous AI response as an Atomic Note in Obsidian or Notion via AI2Stock. Use when the user types /stock or asks to save / append / replace / delete an AI response. Supports natural language (e.g. "直前の回答を保存", "30分前のBYOD議論を保存", "[atom名]を更新") and explicit flags such as --append, --replace, --section, --id, --dry-run, --type, --tags, --project, --confidence, --title, --delete.
 allowed-tools: Bash(ai2stock *) Bash(cat *)
 ---
 
