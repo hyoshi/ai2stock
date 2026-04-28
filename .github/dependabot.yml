@@ -15,6 +15,20 @@ updates:
         dependency-type: development
       production-dependencies:
         dependency-type: production
+    ignore:
+      # vitest 4.x has breaking mock factory changes that fail Notion
+      # adapter tests. Stay on vitest 2.x until we have time for the
+      # migration. Patch / minor 2.x updates are still allowed.
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      # vite and esbuild are pulled in transitively via vitest 2.x.
+      # Their dev-server CVEs (dismissed as tolerable_risk) cannot be
+      # patched without a vitest major bump. Block major updates here
+      # to avoid duplicate PRs for the same group.
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+      - dependency-name: esbuild
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
