@@ -10,6 +10,8 @@ import { writeAtomToNotion } from '../../adapters/notion/write.js';
 import {
   appendToNotionAtom,
   replaceNotionAtomBody,
+  replaceNotionAtomSection,
+  listNotionAtomSections,
   findNotionAtomById,
 } from '../../adapters/notion/edit.js';
 import {
@@ -206,14 +208,10 @@ async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<ty
     }
   }
 
-  if (opts.section && wantsNotion) {
-    console.warn(chalk.yellow('! --section is not yet supported for Notion. Falling back to Obsidian only for section edits.'));
-  }
-
   if (opts.dryRun) {
     console.log(chalk.bold.cyan(`--- DRY RUN: ${describeMode(opts)} ---`));
     if (obsidianTarget) console.log(chalk.dim(`Obsidian target: ${obsidianTarget.filePath}`));
-    if (wantsNotion && !opts.section) {
+    if (wantsNotion) {
       const idForNotion = opts.id ?? obsidianTarget?.id ?? '<resolved-from-recent>';
       console.log(chalk.dim(`Notion target: id=${idForNotion}`));
     }
@@ -259,25 +257,74 @@ async function handleEditMode(body: string, opts: AddOptions, cfg: ReturnType<ty
   }
 
   if (opts.section) {
-    if (!obsidianTarget) {
-      throw new Error('--section requires Obsidian target.');
+    let obsidianSections: string[] = [];
+    let notionSections: string[] = [];
+    let notionPageId: string | undefined;
+
+    if (wantsObsidian && obsidianTarget) {
+      obsidianSections = listSections(obsidianTarget.filePath);
     }
-    const sections = listSections(obsidianTarget.filePath);
-    if (sections.length === 0) {
-      throw new Error('対象Atomに ## 見出しがありません。--replace を使ってください。');
+    if (wantsNotion) {
+      if (!cfg.notion?.enabled) {
+        throw new Error('notion adapter is not enabled in config');
+      }
+      const id = opts.id ?? obsidianTarget?.id;
+      if (!id) {
+        throw new Error('Notion section edit requires --id (atom id).');
+      }
+      const found = await findNotionAtomById(cfg.notion, id);
+      if (!found) {
+        throw new Error(`Notion atom not found: ${id}`);
+      }
+      notionPageId = found.pageId;
+      notionSections = await listNotionAtomSections(cfg.notion, found.pageId);
     }
+
+    // Pre-flight: when both adapters target the same atom, only allow choices
+    // that exist on both sides to prevent partial-state writes.
+    let choices: string[];
+    if (wantsObsidian && wantsNotion) {
+      const notionSet = new Set(notionSections);
+      choices = obsidianSections.filter((s) => notionSet.has(s));
+      const obsidianOnly = obsidianSections.filter((s) => !notionSet.has(s));
+      if (obsidianOnly.length > 0) {
+        console.warn(
+          chalk.yellow(`! Headings only on Obsidian (skipped to avoid partial writes): ${obsidianOnly.join(', ')}`),
+        );
+      }
+    } else if (wantsObsidian) {
+      choices = obsidianSections;
+    } else {
+      choices = notionSections;
+    }
+
+    if (choices.length === 0) {
+      throw new Error('対象Atomに共通の見出しがありません。--replace を使ってください。');
+    }
+
     const { selected } = await prompts({
       type: 'select',
       name: 'selected',
       message: '更新するsectionを選択',
-      choices: sections.map((s) => ({ title: s, value: s })),
+      choices: choices.map((s) => ({ title: s, value: s })),
     });
     if (!selected) {
       throw new Error('sectionが選択されませんでした');
     }
-    replaceSection(obsidianTarget.filePath, selected, body);
-    console.log(chalk.green(`✓ Section置換: ${obsidianTarget.filePath}`));
-    console.log(`  Section: ${selected}`);
+
+    if (wantsObsidian && obsidianTarget) {
+      replaceSection(obsidianTarget.filePath, selected, body);
+      console.log(chalk.green(`✓ Obsidian Section置換: ${obsidianTarget.filePath}`));
+      console.log(`  Section: ${selected}`);
+    }
+    if (wantsNotion && notionPageId && cfg.notion) {
+      try {
+        await replaceNotionAtomSection(cfg.notion, notionPageId, selected, body);
+        console.log(chalk.green(`✓ Notion Section置換: pageId=${notionPageId}`));
+        console.log(`  Section: ${selected}`);
+      } catch (e) { failures.push(`notion: ${(e as Error).message}`); }
+    }
+    finalize(failures, targets);
     return;
   }
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+- **Notion `--section`**: replace a single heading section in a Notion atom page. Works for `heading_1`/`heading_2`/`heading_3` blocks; section bounds detected by next same-or-higher-level heading. Inserts new content after the heading via Notion's `blocks.children.append({ after })`, preserving page order. Shape parity with Obsidian's `--section`.
+- New exports in `src/adapters/notion/edit.ts`: `listNotionAtomSections(cfg, pageId)`, `replaceNotionAtomSection(cfg, pageId, sectionTitle, content)`.
+
+### Changed
+- `src/adapters/notion/edit.ts` internal refactor: extracted `fetchAllChildren`, `headingLevel`, `headingText`, `deleteBlocksOrAbort` helpers; `replaceNotionAtomBody` now reuses them. Existing public behavior preserved.
+- CLI `--section` flow: when both Obsidian and Notion are targeted, prompts once and applies the same section title to both. When only Notion is targeted, fetches sections from the Notion page directly. The "not yet supported for Notion" warning is removed.
+- README en/ja edit-operations table: Notion `--section` cell flipped from ❌ to ✅.
+
+### Hardening (from code review)
+- `--to=all` pre-flight: when section is replaced on both Obsidian and Notion, the prompt only offers headings present in BOTH. Obsidian-only headings are warned and skipped to prevent partial writes.
+- Empty/whitespace heading text is filtered from the section list; an empty `sectionTitle` is rejected before any API call.
+- Duplicate heading titles emit a warning (parity with Obsidian: first occurrence is targeted).
+
+### Known limitations
+- Headings nested inside `toggle`/`callout`/`column` blocks are not surfaced (only direct page children are scanned).
+- Deletes are not transactional in the Notion API; a delete failure aborts the section replace but cannot roll back already-deleted blocks.
+
 ## 0.5.3
 
 ### Changed

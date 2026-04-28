@@ -280,7 +280,7 @@ There are two layouts:
 |---|---|---|
 | `--append` (add to end) | ✅ | ✅ |
 | `--replace` (full body replace) | ✅ | ✅ |
-| `--section` (replace one heading section) | ✅ | ❌ Obsidian only |
+| `--section` (replace one heading section) | ✅ | ✅ |
 | `delete` | ✅ unlink | ✅ archive |
 
 For Notion edits, an explicit `--id <atom-id>` is required (Notion lookup queries the Title property). For Obsidian, the most-recently-added atom is used by default if `--id` is omitted.

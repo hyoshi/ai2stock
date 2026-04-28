@@ -1,6 +1,6 @@
 {
   "name": "@yoshinaga/ai2stock",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Stock AI conversations as Atomic notes in your Obsidian Vault. Turn ephemeral chats into a searchable second brain.",
   "type": "module",
   "bin": {

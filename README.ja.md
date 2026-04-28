@@ -280,7 +280,7 @@ frontmatter（type / tags / project / session / confidence など）は atom ペ
 |---|---|---|
 | `--append`（末尾追記） | ✅ | ✅ |
 | `--replace`（本文全置換） | ✅ | ✅ |
-| `--section`（1見出し section 置換） | ✅ | ❌ Obsidian のみ |
+| `--section`（1見出し section 置換） | ✅ | ✅ |
 | `delete` | ✅ unlink | ✅ archive |
 
 Notion 編集には明示的に `--id <atom-id>` が必要（Notion 側は Title property で検索）。Obsidian は `--id` 省略時 recent.json の直近 atom を対象にします。

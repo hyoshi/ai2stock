@@ -113,27 +113,28 @@ export async function appendToNotionAtom(
   });
 }
 
-export async function replaceNotionAtomBody(
-  cfg: NotionConfig,
-  pageId: string,
-  content: string,
-  tokenEnvOverride?: string,
-): Promise<void> {
-  const client = getClient(cfg, tokenEnvOverride);
+interface ChildBlock {
+  id: string;
+  type?: string;
+  heading_1?: { rich_text?: Array<{ plain_text?: string }> };
+  heading_2?: { rich_text?: Array<{ plain_text?: string }> };
+  heading_3?: { rich_text?: Array<{ plain_text?: string }> };
+}
 
-  const PAGE_CAP = 20;
-  const existingIds: string[] = [];
+const PAGE_CAP = 20;
+
+async function fetchAllChildren(client: Client, pageId: string): Promise<ChildBlock[]> {
+  const all: ChildBlock[] = [];
   let cursor: string | undefined = undefined;
   let truncated = false;
-  let i = 0;
-  for (; i < PAGE_CAP; i++) {
+  for (let i = 0; i < PAGE_CAP; i++) {
     const page = await client.blocks.children.list({
       block_id: pageId,
       start_cursor: cursor,
       page_size: 100,
     });
-    const results = (page as { results: Array<{ id: string }> }).results;
-    for (const child of results) existingIds.push(child.id);
+    const results = (page as { results: ChildBlock[] }).results;
+    for (const child of results) all.push(child);
     const hasMore = (page as { has_more: boolean }).has_more;
     if (!hasMore) break;
     cursor = (page as { next_cursor?: string | null }).next_cursor ?? undefined;
@@ -143,27 +144,57 @@ export async function replaceNotionAtomBody(
     }
   }
   if (truncated) {
-    console.warn(`[ai2stock] Notion: page has more than ${PAGE_CAP * 100} child blocks; older blocks will not be deleted in this replace.`);
+    console.warn(`[ai2stock] Notion: page has more than ${PAGE_CAP * 100} child blocks; older blocks will not be processed.`);
   }
+  return all;
+}
 
-  const deleteFailures: Array<{ id: string; reason: string }> = [];
-  for (const blockId of existingIds) {
+function headingLevel(block: ChildBlock): 1 | 2 | 3 | null {
+  if (block.type === 'heading_1') return 1;
+  if (block.type === 'heading_2') return 2;
+  if (block.type === 'heading_3') return 3;
+  return null;
+}
+
+function headingText(block: ChildBlock): string | null {
+  const level = headingLevel(block);
+  if (!level) return null;
+  const key = `heading_${level}` as 'heading_1' | 'heading_2' | 'heading_3';
+  const rich = block[key]?.rich_text ?? [];
+  return rich.map((r) => r.plain_text ?? '').join('');
+}
+
+async function deleteBlocksOrAbort(
+  client: Client,
+  ids: string[],
+  context: string,
+): Promise<void> {
+  const failures: Array<{ id: string; reason: string }> = [];
+  for (const blockId of ids) {
     try {
       await client.blocks.delete({ block_id: blockId });
     } catch (e) {
-      deleteFailures.push({ id: blockId, reason: (e as Error).message });
+      failures.push({ id: blockId, reason: (e as Error).message });
     }
   }
-  if (deleteFailures.length > 0) {
-    const summary = deleteFailures
-      .slice(0, 3)
-      .map((f) => `${f.id}: ${f.reason}`)
-      .join('; ');
+  if (failures.length > 0) {
+    const summary = failures.slice(0, 3).map((f) => `${f.id}: ${f.reason}`).join('; ');
     throw new Error(
-      `Notion replace aborted: ${deleteFailures.length} of ${existingIds.length} block deletes failed. ` +
-        `Page kept in pre-replace state. First failures: ${summary}`,
+      `Notion ${context} aborted: ${failures.length} of ${ids.length} block deletes failed. First failures: ${summary}`,
     );
   }
+}
+
+export async function replaceNotionAtomBody(
+  cfg: NotionConfig,
+  pageId: string,
+  content: string,
+  tokenEnvOverride?: string,
+): Promise<void> {
+  const client = getClient(cfg, tokenEnvOverride);
+
+  const all = await fetchAllChildren(client, pageId);
+  await deleteBlocksOrAbort(client, all.map((b) => b.id), 'replace');
 
   const newBlocks = buildBlocks(content);
   if (newBlocks.length === 0) return;
@@ -171,6 +202,71 @@ export async function replaceNotionAtomBody(
     block_id: pageId,
     children: newBlocks as never,
   });
+}
+
+export async function listNotionAtomSections(
+  cfg: NotionConfig,
+  pageId: string,
+  tokenEnvOverride?: string,
+): Promise<string[]> {
+  const client = getClient(cfg, tokenEnvOverride);
+  const all = await fetchAllChildren(client, pageId);
+  const sections: string[] = [];
+  for (const b of all) {
+    const t = headingText(b);
+    if (t !== null && t.trim() !== '') sections.push(t);
+  }
+  // Duplicates are kept (parity with Obsidian's listSections), but warn since
+  // replace will silently target the first occurrence.
+  const dupes = sections.filter((s, i) => sections.indexOf(s) !== i);
+  if (dupes.length > 0) {
+    console.warn(
+      `[ai2stock] Notion: page has duplicate heading(s): ${[...new Set(dupes)].join(', ')}. --section will target the first occurrence.`,
+    );
+  }
+  return sections;
+}
+
+export async function replaceNotionAtomSection(
+  cfg: NotionConfig,
+  pageId: string,
+  sectionTitle: string,
+  content: string,
+  tokenEnvOverride?: string,
+): Promise<void> {
+  if (!sectionTitle || !sectionTitle.trim()) {
+    throw new Error('Section title must be a non-empty string.');
+  }
+  const client = getClient(cfg, tokenEnvOverride);
+  const all = await fetchAllChildren(client, pageId);
+
+  const headingIdx = all.findIndex((b) => headingText(b) === sectionTitle);
+  if (headingIdx === -1) {
+    throw new Error(`Section not found: ${sectionTitle}`);
+  }
+  const heading = all[headingIdx];
+  const level = headingLevel(heading)!;
+
+  // Section ends at the next heading whose level is same-or-higher (lower number).
+  let endIdx = all.length;
+  for (let i = headingIdx + 1; i < all.length; i++) {
+    const lv = headingLevel(all[i]);
+    if (lv !== null && lv <= level) {
+      endIdx = i;
+      break;
+    }
+  }
+  const bodyIds = all.slice(headingIdx + 1, endIdx).map((b) => b.id);
+
+  await deleteBlocksOrAbort(client, bodyIds, 'section replace');
+
+  const newBlocks = buildBlocks(content);
+  if (newBlocks.length === 0) return;
+  await client.blocks.children.append({
+    block_id: pageId,
+    after: heading.id,
+    children: newBlocks as never,
+  } as never);
 }
 
 export async function archiveNotionAtom(

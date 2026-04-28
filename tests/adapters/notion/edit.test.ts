@@ -24,6 +24,8 @@ const {
   appendToNotionAtom,
   replaceNotionAtomBody,
   archiveNotionAtom,
+  listNotionAtomSections,
+  replaceNotionAtomSection,
 } = await import('../../../src/adapters/notion/edit.js');
 
 const cfg: NotionConfig = {
@@ -310,5 +312,222 @@ describe('archiveNotionAtom (pages mode, 2-level verify)', () => {
       .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'session-page-1' } })
       .mockResolvedValueOnce({ parent: { type: 'page_id', page_id: 'some-random-page' } });
     await expect(archiveNotionAtom(wsCfg, 'atom-page-abc')).rejects.toThrow(/outside workspace top level/);
+  });
+});
+
+function headingBlock(id: string, level: 1 | 2 | 3, text: string): Record<string, unknown> {
+  const key = `heading_${level}` as const;
+  return {
+    id,
+    type: key,
+    [key]: { rich_text: [{ plain_text: text }] },
+  };
+}
+
+function paraBlock(id: string, text: string): Record<string, unknown> {
+  return {
+    id,
+    type: 'paragraph',
+    paragraph: { rich_text: [{ plain_text: text }] },
+  };
+}
+
+describe('listNotionAtomSections', () => {
+  it('returns plain text of all heading_1/2/3 blocks in order', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 1, 'Top'),
+        paraBlock('p1', 'intro'),
+        headingBlock('h2', 2, 'Section A'),
+        paraBlock('p2', 'body of A'),
+        headingBlock('h3', 3, 'Sub of A'),
+        headingBlock('h4', 2, 'Section B'),
+      ],
+      has_more: false,
+    });
+    const sections = await listNotionAtomSections(cfg, 'page-abc');
+    expect(sections).toEqual(['Top', 'Section A', 'Sub of A', 'Section B']);
+  });
+
+  it('returns [] when there are no headings', async () => {
+    listMock.mockResolvedValue({
+      results: [paraBlock('p1', 'just text'), paraBlock('p2', 'more text')],
+      has_more: false,
+    });
+    expect(await listNotionAtomSections(cfg, 'page-abc')).toEqual([]);
+  });
+
+  it('paginates list when has_more', async () => {
+    listMock
+      .mockResolvedValueOnce({
+        results: [headingBlock('h1', 2, 'First')],
+        has_more: true,
+        next_cursor: 'c1',
+      })
+      .mockResolvedValueOnce({
+        results: [headingBlock('h2', 2, 'Second')],
+        has_more: false,
+      });
+    expect(await listNotionAtomSections(cfg, 'page-abc')).toEqual(['First', 'Second']);
+    expect(listMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('filters out headings with empty/whitespace text', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 2, 'Real'),
+        headingBlock('h2', 2, ''),
+        headingBlock('h3', 2, '   '),
+        headingBlock('h4', 2, 'Also Real'),
+      ],
+      has_more: false,
+    });
+    expect(await listNotionAtomSections(cfg, 'page-abc')).toEqual(['Real', 'Also Real']);
+  });
+
+  it('warns when duplicate heading titles exist', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 2, 'Same'),
+        paraBlock('p', 'x'),
+        headingBlock('h2', 2, 'Same'),
+      ],
+      has_more: false,
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const sections = await listNotionAtomSections(cfg, 'page-abc');
+    expect(sections).toEqual(['Same', 'Same']);
+    const warns = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(warns).toMatch(/duplicate heading.*Same/);
+    warnSpy.mockRestore();
+  });
+});
+
+describe('replaceNotionAtomSection', () => {
+  it('finds heading, deletes section body, appends new blocks after heading', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 2, 'Section A'),
+        paraBlock('a-body-1', 'old line 1'),
+        paraBlock('a-body-2', 'old line 2'),
+        headingBlock('h2', 2, 'Section B'),
+        paraBlock('b-body', 'untouched'),
+      ],
+      has_more: false,
+    });
+    deleteMock.mockResolvedValue({});
+    appendMock.mockResolvedValue({});
+
+    await replaceNotionAtomSection(cfg, 'page-abc', 'Section A', 'fresh body');
+
+    expect(deleteMock).toHaveBeenCalledTimes(2);
+    const deletedIds = deleteMock.mock.calls.map((c) => c[0].block_id);
+    expect(deletedIds).toEqual(['a-body-1', 'a-body-2']);
+    expect(appendMock).toHaveBeenCalledTimes(1);
+    const appendArg = appendMock.mock.calls[0][0];
+    expect(appendArg.block_id).toBe('page-abc');
+    expect(appendArg.after).toBe('h1');
+    const types = appendArg.children.map((b: { type: string }) => b.type);
+    expect(types).toContain('paragraph');
+  });
+
+  it('section ending at end-of-page deletes all trailing blocks', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 2, 'Other'),
+        paraBlock('p-other', 'untouched'),
+        headingBlock('h2', 2, 'Last'),
+        paraBlock('last-1', 'old 1'),
+        paraBlock('last-2', 'old 2'),
+      ],
+      has_more: false,
+    });
+    deleteMock.mockResolvedValue({});
+    appendMock.mockResolvedValue({});
+
+    await replaceNotionAtomSection(cfg, 'page-abc', 'Last', 'new');
+
+    const deletedIds = deleteMock.mock.calls.map((c) => c[0].block_id);
+    expect(deletedIds).toEqual(['last-1', 'last-2']);
+    expect(appendMock.mock.calls[0][0].after).toBe('h2');
+  });
+
+  it('section ending at higher-level heading (h3 section ends at h2)', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h2-1', 2, 'Outer'),
+        headingBlock('h3-1', 3, 'Inner'),
+        paraBlock('inner-1', 'inner body'),
+        headingBlock('h2-2', 2, 'Sibling Outer'),
+        paraBlock('sib-1', 'sibling body'),
+      ],
+      has_more: false,
+    });
+    deleteMock.mockResolvedValue({});
+    appendMock.mockResolvedValue({});
+
+    await replaceNotionAtomSection(cfg, 'page-abc', 'Inner', 'replacement');
+
+    const deletedIds = deleteMock.mock.calls.map((c) => c[0].block_id);
+    expect(deletedIds).toEqual(['inner-1']);
+    expect(appendMock.mock.calls[0][0].after).toBe('h3-1');
+  });
+
+  it('throws when no heading matches the section title', async () => {
+    listMock.mockResolvedValue({
+      results: [headingBlock('h1', 2, 'Existing')],
+      has_more: false,
+    });
+    await expect(
+      replaceNotionAtomSection(cfg, 'page-abc', 'Missing', 'x'),
+    ).rejects.toThrow(/Section not found: Missing/);
+    expect(deleteMock).not.toHaveBeenCalled();
+    expect(appendMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty/whitespace section title before any API call', async () => {
+    await expect(
+      replaceNotionAtomSection(cfg, 'page-abc', '', 'x'),
+    ).rejects.toThrow(/non-empty/);
+    await expect(
+      replaceNotionAtomSection(cfg, 'page-abc', '   ', 'x'),
+    ).rejects.toThrow(/non-empty/);
+    expect(listMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts (does not append) when any delete fails', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 2, 'Target'),
+        paraBlock('body-1', 'old'),
+        paraBlock('body-2', 'old2'),
+      ],
+      has_more: false,
+    });
+    deleteMock
+      .mockRejectedValueOnce(new Error('cannot delete'))
+      .mockResolvedValueOnce({});
+    await expect(
+      replaceNotionAtomSection(cfg, 'page-abc', 'Target', 'new'),
+    ).rejects.toThrow(/section replace aborted/);
+    expect(appendMock).not.toHaveBeenCalled();
+  });
+
+  it('skips appending when new content has no blocks (delete still runs)', async () => {
+    listMock.mockResolvedValue({
+      results: [
+        headingBlock('h1', 2, 'Empty'),
+        paraBlock('body-1', 'old'),
+        headingBlock('h2', 2, 'Other'),
+      ],
+      has_more: false,
+    });
+    deleteMock.mockResolvedValue({});
+    appendMock.mockResolvedValue({});
+
+    await replaceNotionAtomSection(cfg, 'page-abc', 'Empty', '   \n\n   ');
+
+    expect(deleteMock).toHaveBeenCalledTimes(1);
+    expect(appendMock).not.toHaveBeenCalled();
   });
 });
