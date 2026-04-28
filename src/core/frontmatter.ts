@@ -30,18 +30,28 @@ export function formatIso(d: Date): string {
 }
 
 export function slugify(title: string): string {
-  const asciiLetters = (title.match(/[a-zA-Z]/g) || []).length;
-  const totalNonSpace = title.replace(/\s/g, '').length;
+  if (!title) return '';
+  const trimmed = title.trim();
+  if (!trimmed) return '';
 
-  if (totalNonSpace === 0) return '';
-  if (asciiLetters / totalNonSpace < 0.3) return '';
+  const cleaned = trimmed
+    .replace(/[\/\\:*?"<>|\x00-\x1f]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
-  return title
-    .toLowerCase()
-    .replace(/[^\x00-\x7f]/g, ' ')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
+  if (!cleaned) return '';
+
+  const isAscii = /^[\x00-\x7f]*$/.test(cleaned);
+  if (isAscii) {
+    return cleaned
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+  }
+
+  return cleaned.slice(0, 40);
 }
 
 export function generateId(title: string, now: Date = new Date()): string {
