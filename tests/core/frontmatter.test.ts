@@ -8,9 +8,19 @@ describe('generateId', () => {
     expect(id).toMatch(/^2026-04-23-\d{4}-test-title-for-id$/);
   });
 
-  it('handles Japanese titles by removing non-ASCII', () => {
+  it('preserves Japanese characters mixed with ASCII', () => {
     const id = generateId('日本語タイトル test', new Date('2026-04-23T10:00:00+09:00'));
-    expect(id).toMatch(/^2026-04-23-\d{4}-test$/);
+    expect(id).toMatch(/^2026-04-23-\d{4}-日本語タイトル-test$/);
+  });
+
+  it('preserves Japanese-only titles', () => {
+    const id = generateId('経営会議のメモ', new Date('2026-04-23T10:00:00+09:00'));
+    expect(id).toMatch(/^2026-04-23-\d{4}-経営会議のメモ$/);
+  });
+
+  it('strips filesystem-unsafe characters', () => {
+    const id = generateId('path/to:file?name', new Date('2026-04-23T10:00:00+09:00'));
+    expect(id).toMatch(/^2026-04-23-\d{4}-pathtofilename$/);
   });
 
   it('truncates long titles', () => {
@@ -18,8 +28,13 @@ describe('generateId', () => {
     expect(id.length).toBeLessThanOrEqual(80);
   });
 
-  it('returns id with untitled when slug is empty', () => {
-    const id = generateId('日本語のみ', new Date('2026-04-23T10:00:00+09:00'));
+  it('falls back to untitled when title is empty', () => {
+    const id = generateId('', new Date('2026-04-23T10:00:00+09:00'));
+    expect(id).toMatch(/^2026-04-23-\d{4}-untitled$/);
+  });
+
+  it('falls back to untitled when title is whitespace only', () => {
+    const id = generateId('   ', new Date('2026-04-23T10:00:00+09:00'));
     expect(id).toMatch(/^2026-04-23-\d{4}-untitled$/);
   });
 });

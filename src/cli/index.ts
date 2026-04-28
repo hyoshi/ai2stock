@@ -10,7 +10,7 @@ const program = new Command();
 program
   .name('ai2stock')
   .description('Stock AI conversations as Atomic notes in your Obsidian Vault.')
-  .version('0.1.0');
+  .version('0.6.0');
 
 program
   .command('init')
