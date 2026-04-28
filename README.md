@@ -1,5 +1,9 @@
 # AI2Stock
 
+[![CI](https://github.com/hyoshi/ai2stock/actions/workflows/test.yml/badge.svg)](https://github.com/hyoshi/ai2stock/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
+
 **Save your AI conversations to Obsidian or Notion.**
 **Turn ephemeral chats into a searchable second brain.**
 
